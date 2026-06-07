@@ -549,6 +549,20 @@ func (r *QueryRangeRequest) SkipFillGaps(name string) bool {
 	return false
 }
 
+func (r *QueryRangeRequest) Normalize() error {
+	// Add a default limit for group by if not provided
+	// TODO(tushar): This is a bad fix, because this is silently adding a default limit to the query without the user's knowledge.
+	// We should remove this once we have a better way to handle this.
+	if r.RequestType == RequestTypeScalar || r.RequestType == RequestTypeTimeSeries {
+		for idx := range r.CompositeQuery.Queries {
+			if r.CompositeQuery.Queries[idx].GetLimit() == 0 && len(r.CompositeQuery.Queries[idx].GetGroupBy()) > 0 {
+				r.CompositeQuery.Queries[idx].SetLimit(100)
+			}
+		}
+	}
+	return nil
+}
+
 // UnmarshalJSON implements custom JSON unmarshaling to disallow unknown fields.
 func (r *QueryRangeRequest) UnmarshalJSON(data []byte) error {
 	// Define a type alias to avoid infinite recursion
@@ -608,6 +622,10 @@ func (r *QueryRangeRequest) UnmarshalJSON(data []byte) error {
 
 	// Copy the decoded values back to the original struct
 	*r = QueryRangeRequest(temp)
+
+	if err := r.Normalize(); err != nil {
+		return err
+	}
 
 	return nil
 }
