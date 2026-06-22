@@ -1,0 +1,34 @@
+.chips {
+	list-style: none;
+	margin: 0;
+	padding: 0 0 0 calc(14px + var(--spacing-3));
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing-3);
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing-3);
+	padding: var(--spacing-1) var(--spacing-4);
+	background: var(--l1-background);
+	border: 1px solid var(--l2-border);
+	border-radius: var(--spacing-2);
+}
+
+.chipDot {
+	width: var(--spacing-2);
+	height: var(--spacing-2);
+	border-radius: 50%;
+	background: var(--bg-robin-400);
+	flex-shrink: 0;
+}
+
+.chipLabel {
+	font-family: 'Geist Mono', monospace;
+	font-size: var(--periscope-font-size-small);
+	font-weight: var(--font-weight-normal);
+	line-height: var(--line-height-18);
+	color: var(--l2-foreground);
+}
