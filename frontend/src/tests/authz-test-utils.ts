@@ -167,3 +167,19 @@ export function mockUseAuthZDenyAll(
 		refetchPermissions: jest.fn(),
 	};
 }
+
+/** Grants only :read: permissions, denies all others. */
+export function mockUseAuthZGrantReadOnly(
+	permissions: BrandedPermission[],
+	_options?: UseAuthZOptions,
+): UseAuthZResult {
+	return {
+		isLoading: false,
+		isFetching: false,
+		error: null,
+		permissions: Object.fromEntries(
+			permissions.map((p) => [p, { isGranted: p.includes(':read:') }]),
+		) as UseAuthZResult['permissions'],
+		refetchPermissions: jest.fn(),
+	};
+}
