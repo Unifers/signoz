@@ -77,6 +77,7 @@ function SettingsPage(): JSX.Element {
 					...item,
 					isEnabled:
 						item.key === ROUTES.ROLES_SETTINGS ||
+						item.key === ROUTES.ROLE_CREATE ||
 						item.key === ROUTES.ROLE_DETAILS ||
 						item.key === ROUTES.SERVICE_ACCOUNTS_SETTINGS
 							? true
@@ -126,6 +127,7 @@ function SettingsPage(): JSX.Element {
 					...item,
 					isEnabled:
 						item.key === ROUTES.ROLES_SETTINGS ||
+						item.key === ROUTES.ROLE_CREATE ||
 						item.key === ROUTES.ROLE_DETAILS ||
 						item.key === ROUTES.SERVICE_ACCOUNTS_SETTINGS
 							? true
@@ -173,6 +175,7 @@ function SettingsPage(): JSX.Element {
 					...item,
 					isEnabled:
 						item.key === ROUTES.ROLES_SETTINGS ||
+						item.key === ROUTES.ROLE_CREATE ||
 						item.key === ROUTES.ROLE_DETAILS ||
 						item.key === ROUTES.SERVICE_ACCOUNTS_SETTINGS
 							? true

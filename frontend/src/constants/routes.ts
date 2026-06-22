@@ -55,6 +55,7 @@ const ROUTES = {
 	TRACE_EXPLORER: '/trace-explorer',
 	BILLING: '/settings/billing',
 	ROLES_SETTINGS: '/settings/roles',
+	ROLE_CREATE: '/settings/roles/new',
 	ROLE_DETAILS: '/settings/roles/:roleId',
 	MEMBERS_SETTINGS: '/settings/members',
 	SUPPORT: '/support',

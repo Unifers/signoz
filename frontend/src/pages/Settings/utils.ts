@@ -12,6 +12,7 @@ import {
 	multiIngestionSettings,
 	mySettings,
 	organizationSettings,
+	roleCreate,
 	roleDetails,
 	rolesSettings,
 	serviceAccountsSettings,
@@ -61,6 +62,7 @@ export const getRoutes = (
 	settings.push(
 		...serviceAccountsSettings(t),
 		...rolesSettings(t),
+		...roleCreate(t),
 		...roleDetails(t),
 	);
 
