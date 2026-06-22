@@ -1,0 +1,74 @@
+.drawerDescription {
+	overflow-y: auto;
+}
+
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-8);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-3);
+}
+
+.label {
+	font-size: var(--periscope-font-size-small);
+	font-weight: var(--font-weight-medium);
+	color: var(--foreground);
+	text-transform: uppercase;
+	letter-spacing: 0.44px;
+}
+
+.description {
+	font-size: var(--periscope-font-size-base);
+	color: var(--l1-foreground);
+	line-height: var(--line-height-20);
+	margin: 0;
+}
+
+.metaRow {
+	display: flex;
+	gap: var(--spacing-12);
+}
+
+.metaItem {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-3);
+}
+
+.permissionsSection {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-4);
+	margin-top: var(--spacing-4);
+}
+
+.permissionsHeader {
+	display: flex;
+	align-items: center;
+	padding-bottom: var(--spacing-2);
+	border-bottom: 1px solid var(--l1-border);
+}
+
+.footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	--button-disabled-pointer-events: auto;
+
+	width: 100%;
+}
+
+.footerLeft {
+	display: flex;
+	gap: var(--spacing-6);
+}
+
+.footerRight {
+	display: flex;
+	gap: var(--spacing-6);
+}
