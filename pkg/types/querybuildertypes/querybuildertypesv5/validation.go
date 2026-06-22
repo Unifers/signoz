@@ -630,6 +630,20 @@ func (r *QueryRangeRequest) ValidateRequestScope() ([]ValidationOption, error) {
 	return opts, nil
 }
 
+// Validate parses and validates the preview (dry-run) query-string parameters
+// and returns the per-call options the preview engine consumes. Verbose defaults
+// to TRUE (the full preview) and accepts true/1/false/0; any other value is
+// rejected as invalid input.
+func (p *QueryRangePreviewParams) Validate() (QueryRangePreviewOptions, error) {
+	switch strings.ToLower(strings.TrimSpace(p.Verbose)) {
+	case "", "true", "1":
+		return QueryRangePreviewOptions{Verbose: true}, nil
+	case "false", "0":
+		return QueryRangePreviewOptions{Verbose: false}, nil
+	}
+	return QueryRangePreviewOptions{}, errors.NewInvalidInputf(errors.CodeInvalidInput, "invalid verbose value %q (allowed: true, false)", p.Verbose)
+}
+
 // Validate validates a single query envelope's spec. It is the per-query
 // counterpart to QueryRangeRequest.ValidateRequestScope, used by the dry-run to
 // report each query's structural error independently.

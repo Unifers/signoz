@@ -112,13 +112,14 @@ func (handler *handler) QueryRangePreview(rw http.ResponseWriter, req *http.Requ
 
 	// verbose defaults to true (full preview); ?verbose=false returns the
 	// lightweight verdict-only response.
-	verbose, err := ParseVerbose(req.URL.Query().Get("verbose"))
+	previewParams := qbtypes.QueryRangePreviewParams{Verbose: req.URL.Query().Get("verbose")}
+	previewOpts, err := previewParams.Validate()
 	if err != nil {
 		render.Error(rw, err)
 		return
 	}
 
-	preview, err := handler.querier.QueryRangePreview(ctx, orgID, &queryRangeRequest, qbtypes.QueryRangePreviewOptions{Verbose: verbose})
+	preview, err := handler.querier.QueryRangePreview(ctx, orgID, &queryRangeRequest, previewOpts)
 	if err != nil {
 		render.Error(rw, err)
 		return
