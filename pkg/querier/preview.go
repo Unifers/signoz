@@ -18,20 +18,14 @@ import (
 	"github.com/SigNoz/signoz/pkg/valuer"
 )
 
-// magnitudeReferenceRows is the estimated row count treated as "fully expensive"
-// (magnitude score 0) by magnitudeScoreFromRows. It's a heuristic reference — the
-// point past which a scan is considered maximally costly — and is deliberately a
-// single tunable constant rather than per-table, so the score is comparable
-// across queries.
+// magnitudeReferenceRows is the row count treated as maximally costly
+// (magnitude score 0) by magnitudeScoreFromRows.
 const magnitudeReferenceRows = 1e9
 
-// userFacingClickHouseErrorCodes mirrors PR #10679's userFacingCHCodes: the
-// ClickHouse error codes that indicate a problem with the query itself (bad SQL,
-// unknown table/column, …) rather than a server-side/infra failure — i.e. the
-// ones that should map to invalid input (400) instead of internal (500).
+// userFacingClickHouseErrorCodes are the ClickHouse error codes that indicate a
+// bad query (map to 400) rather than an infra failure (500).
 //
-// TODO(#10679): once that PR lands, delete this and have explainBindCheck call
-// the shared querier.mapClickHouseError so there's a single source of truth.
+// TODO(#10679): replace with the shared querier.mapClickHouseError once it lands.
 var userFacingClickHouseErrorCodes = map[chproto.Error]bool{
 	chproto.ErrSyntaxError:                  true,
 	chproto.ErrUnknownTable:                 true,
@@ -50,15 +44,13 @@ var userFacingClickHouseErrorCodes = map[chproto.Error]bool{
 	chproto.ErrTooLessArgumentsForFunction:  true,
 }
 
-// statementProvider is implemented by query types that can render the
-// underlying SQL/PromQL statement without executing it.
+// statementProvider renders a query's underlying statement without executing it.
 type statementProvider interface {
 	Statement(ctx context.Context) (*qbtypes.Statement, error)
 }
 
-// previewTask is one rendered ClickHouse statement queued for ClickHouse-bound
-// preview work (the granules and/or estimate analysis). stmtIdx is the index into
-// the query's Statements list that this task's results merge back into.
+// previewTask is one rendered statement queued for granule/estimate analysis.
+// stmtIdx is where its results merge back into the query's Statements.
 type previewTask struct {
 	name    string
 	stmtIdx int
@@ -84,12 +76,9 @@ type explainPlanIndex struct {
 	SelectedGranules *int64   `json:"Selected Granules"`
 }
 
-// QueryRangePreview validates each query in the composite query without
-// executing it. With opts.Verbose=false it returns a lightweight per-query
-// verdict (valid/error/warnings). With opts.Verbose=true it also renders the
-// underlying ClickHouse statement(s) each query would run and attaches, per
-// statement, the EXPLAIN ESTIMATE and granule index analysis, deriving the
-// top-level SelectivityScore and MagnitudeScore.
+// QueryRangePreview validates and renders each query without executing it.
+// When opts.Verbose, it also attaches each statement's EXPLAIN ESTIMATE and
+// granule analysis and derives the top-level scores.
 func (q *querier) QueryRangePreview(
 	ctx context.Context,
 	_ valuer.UUID,
@@ -126,8 +115,7 @@ func (q *querier) QueryRangePreview(
 
 		missingMetricQueries, metricWarnings, mErr := q.resolveMetricMetadata(ctx, env, req.Start, req.End)
 		if mErr != nil {
-			// Don't abort the whole preview: report this query's error and keep
-			// going so the agent sees every problem in one round trip.
+			// Report this query's error but keep previewing the rest.
 			ps.Error = mErr
 		} else {
 			ps.Warnings = append(ps.Warnings, metricWarnings...)
@@ -155,26 +143,24 @@ func (q *querier) QueryRangePreview(
 	}
 	providers, buildErrs := q.buildPreviewProviders(req, dependencyQueries, missingMetricQuerySet, skip)
 
-	// Render the statement for each query that actually executes, and collect the
-	// ClickHouse-bound work (granules/estimate analyses) to run concurrently.
+	// Render each executing query's statement and collect the ClickHouse-bound
+	// analysis work to run concurrently.
 	var previewTasks []previewTask
 	for _, query := range req.CompositeQuery.Queries {
 		name := query.GetQueryName()
 		ps := prepared[name]
 
-		// Surface a phase-1 error (e.g. a not-found metric) without rendering.
+		// Surface an earlier error without rendering.
 		if ps.Error != nil {
 			results[name] = ps
 			continue
 		}
-		// Every aggregation resolved to a missing metric: QueryRange returns an
-		// empty result for this query and renders no SQL. Mirror that.
+		// Fully-missing metric: QueryRange renders no SQL, so neither do we.
 		if missingMetricQuerySet[name] {
 			results[name] = ps
 			continue
 		}
-		// A build error is this query's verdict — attribute it and move on
-		// instead of aborting the whole preview.
+		// Attribute a build error to this query instead of aborting the preview.
 		if bErr := buildErrs[name]; bErr != nil {
 			ps.Error = bErr
 			results[name] = ps
@@ -183,10 +169,8 @@ func (q *querier) QueryRangePreview(
 
 		provider, ok := providers[name]
 		if !ok {
-			// Formula/join/sub-query are valid query types that render no standalone
-			// statement of their own — they're evaluated from the queries they
-			// reference, which are previewed individually. Report them as valid with
-			// a note rather than failing them.
+			// Formula/join/sub-query render no standalone statement; report them
+			// as valid with a note rather than failing them.
 			if !rendersStandaloneStatement(query.Type) {
 				ps.Warnings = append(ps.Warnings, fmt.Sprintf(
 					"query type %q has no standalone statement to preview; it is evaluated from the queries it references", query.Type.StringValue()))
@@ -214,11 +198,8 @@ func (q *querier) QueryRangePreview(
 
 		ps.Warnings = append(ps.Warnings, stmt.Warnings...)
 
-		// clickhouse_sql is user-authored raw SQL; rendering only substitutes
-		// variables, so by itself it doesn't prove the SQL is valid. Verify it
-		// parses and binds (tables/columns/types resolve) via EXPLAIN PLAN —
-		// without executing. Builder/PromQL/trace-operator SQL is engine-generated
-		// and well-formed by construction, so this is scoped to clickhouse_sql.
+		// clickhouse_sql is user-authored, so verify it parses and binds via
+		// EXPLAIN PLAN. Engine-generated SQL is well-formed by construction.
 		if query.Type == qbtypes.QueryTypeClickHouseSQL {
 			if bindErr := q.explainBindCheck(ctx, stmt.Query, stmt.Args); bindErr != nil {
 				if errors.Ast(bindErr, errors.TypeInvalidInput) {
@@ -226,8 +207,7 @@ func (q *querier) QueryRangePreview(
 					results[name] = ps
 					continue
 				}
-				// Validity unknown (infra/non-user-facing failure) — warn, don't
-				// falsely mark the query invalid.
+				// Infra failure, not a query problem: warn, don't mark invalid.
 				ps.Warnings = append(ps.Warnings, "could not validate ClickHouse SQL: "+bindErr.Error())
 			}
 		}
@@ -293,9 +273,7 @@ func (q *querier) QueryRangePreview(
 }
 
 // missingMetricNames returns the distinct metric names referenced by a metric
-// builder query, in order of first appearance. It is used to name the metric(s)
-// in the warning attached to a fully-missing-metric query. Returns nil for any
-// non-metric query.
+// builder query, or nil for a non-metric query.
 func missingMetricNames(env qbtypes.QueryEnvelope) []string {
 	spec, ok := env.Spec.(qbtypes.QueryBuilderQuery[qbtypes.MetricAggregation])
 	if !ok {
@@ -319,8 +297,7 @@ func (q *querier) buildPreviewProviders(
 	providers = make(map[string]qbtypes.Query)
 	errs = make(map[string]error)
 
-	// buildQueries records analytics on the event; the preview emits none.
-	event := &qbtypes.QBEvent{}
+	event := &qbtypes.QBEvent{} // preview emits no analytics
 
 	for _, query := range req.CompositeQuery.Queries {
 		name := query.GetQueryName()
@@ -330,9 +307,8 @@ func (q *querier) buildPreviewProviders(
 
 		sub := *req // shallow copy: only CompositeQuery and RequestType are swapped
 
-		// deps is the set buildQueries skips within this composite: empty for a
-		// standalone query (so it gets built), and the operator's referenced
-		// siblings for a trace operator (so only the operator is built from it).
+		// deps is the set buildQueries skips: empty for a standalone query, the
+		// operator's referenced siblings for a trace operator.
 		var deps map[string]bool
 
 		switch {
@@ -364,11 +340,8 @@ func (q *querier) buildPreviewProviders(
 	return providers, errs
 }
 
-// rendersStandaloneStatement reports whether a query type renders to its own
-// ClickHouse/PromQL statement the preview can build and analyze. Formula, join,
-// and sub-query are valid query types but carry no statement of their own —
-// they're evaluated from the queries they reference — so buildQueries (and hence
-// the preview) renders nothing for them. Mirrors buildQueries' switch.
+// rendersStandaloneStatement reports whether a query type renders its own
+// statement. Formula/join/sub-query don't — they reference other queries.
 func rendersStandaloneStatement(t qbtypes.QueryType) bool {
 	switch t {
 	case qbtypes.QueryTypeBuilder,
@@ -424,13 +397,11 @@ func (q *querier) runPreviewTasks(ctx context.Context, tasks []previewTask, prev
 			t := tasks[i]
 			var out outcome
 			if granules, ok, scErr := q.computeGranuleStats(ctx, t.query, t.args); scErr != nil {
-				// Surface the failure instead of silently dropping the score.
 				out.warnings = append(out.warnings, "could not compute query score: "+scErr.Error())
 			} else if ok {
 				out.granules = &granules
 			}
 			if estimate, eErr := q.runExplainEstimate(ctx, t.query, t.args); eErr != nil {
-				// Surface the failure instead of silently dropping the output.
 				out.warnings = append(out.warnings, "could not run EXPLAIN ESTIMATE: "+eErr.Error())
 			} else {
 				out.estimate = estimate
@@ -496,8 +467,7 @@ func (q *querier) runExplainEstimate(ctx context.Context, stmt string, args []an
 	return entries, nil
 }
 
-// toInt64 coerces a driver-scanned numeric value (ESTIMATE's parts/rows/marks
-// arrive as unsigned integers) to int64. A non-numeric value yields 0.
+// toInt64 coerces a driver-scanned numeric value to int64 (0 if non-numeric).
 func toInt64(v any) int64 {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
@@ -546,8 +516,7 @@ func (q *querier) computeGranuleStats(ctx context.Context, stmt string, args []a
 	}
 	defer rows.Close()
 
-	// json=1 emits the plan as a single JSON document; read every row and join
-	// so we are robust to the driver splitting it across rows.
+	// json=1 emits one JSON document; join rows in case the driver splits it.
 	var sb strings.Builder
 	for rows.Next() {
 		var line string
@@ -574,7 +543,7 @@ func (q *querier) computeGranuleStats(ctx context.Context, stmt string, args []a
 		collectMergeTreeReads(&plans[i].Plan, &reads, &totalInitial, &totalSelected)
 	}
 	if totalInitial <= 0 {
-		// No MergeTree index analysis in the plan — nothing to score.
+		// No MergeTree index analysis — nothing to score.
 		return qbtypes.Granules{}, false, nil
 	}
 	if totalSelected < 0 {

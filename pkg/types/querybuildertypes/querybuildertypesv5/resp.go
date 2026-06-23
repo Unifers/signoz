@@ -65,37 +65,19 @@ type QueryRangeResponse struct {
 	QBEvent *QBEvent `json:"-"`
 }
 
-// QueryRangePreviewResponse describes the dry-run output of a query range
-// request. CompositeQuery mirrors the request's compositeQuery: each entry is
-// the dry-run result for one query, keyed by the same query name the request
-// used.
+// QueryRangePreviewResponse is the dry-run output: one QueryPreview per query,
+// keyed by the request's query names.
 type QueryRangePreviewResponse struct {
 	CompositeQuery map[string]QueryPreview `json:"compositeQuery"`
 }
 
-// QueryRangePreviewOptions carries per-call options for the query range
-// preview (dry-run) endpoint. The zero value produces a lightweight,
-// verdict-only preview (valid/error/warnings per query, no rendered SQL).
+// QueryRangePreviewOptions carries per-call options for the dry-run endpoint.
 type QueryRangePreviewOptions struct {
-	// Verbose is the single switch for the full preview, and the HTTP endpoint
-	// defaults it to TRUE. When true, each rendered statement carries its EXPLAIN
-	// ESTIMATE (PreviewStatement.Estimate) and granule index analysis
-	// (PreviewStatement.Granules, including the per-index funnel), and the query
-	// gets both headline scores (SelectivityScore and MagnitudeScore); the two
-	// analyses cost one ClickHouse EXPLAIN per statement each. When false (set via
-	// ?verbose=false) every query is still validated but the response is just the
-	// per-query verdict, with no rendered SQL and no ClickHouse round trips.
 	Verbose bool
 }
 
-// QueryRangePreviewParams documents the query-string parameters accepted by the
-// query range preview (dry-run) endpoint.
+// QueryRangePreviewParams are the query-string parameters of the dry-run endpoint.
 type QueryRangePreviewParams struct {
-	// Verbose defaults to "true": the full preview — the rendered ClickHouse
-	// statement(s) with each statement's EXPLAIN ESTIMATE and granule index
-	// analysis, plus the top-level selectivityScore and magnitudeScore. Set
-	// verbose=false for the lightweight per-query verdict (valid/error/warnings)
-	// with no rendered SQL and no ClickHouse round trips.
 	Verbose string `query:"verbose"`
 }
 
@@ -105,76 +87,28 @@ func (q *QueryRangePreviewResponse) PrepareJSONSchema(schema *jsonschema.Schema)
 	return nil
 }
 
-// QueryPreview is the dry-run result for a single query, keyed by query name
-// in QueryRangePreviewResponse.CompositeQuery.
+// QueryPreview is the dry-run result for a single query.
 type QueryPreview struct {
-	// Valid is the headline verdict for this query: true when it previewed
-	// without error, false when Error is set. It is always present (derived from
-	// Error at marshal time) so an agent can branch on a single boolean instead
-	// of testing for the presence of the error object.
 	Valid bool `json:"valid"`
-	// Error describes why this query is invalid or could not be previewed; nil
-	// when the query previewed successfully. It is the structured form
-	// (code, message, and — when available — suggestions and invalidReferences)
-	// so an agent can act on it programmatically instead of parsing a string.
 	Error    error    `json:"error,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
-	// SelectivityScore is the headline selectivity for this query: the percentage
-	// (0-100) of candidate granules eliminated by partition, primary-key, and
-	// skip-index pruning before any data is read (higher = less data read). It is
-	// the minimum of the per-statement Statements[].Granules.SkipScore values —
-	// the least-selective (worst) underlying statement, which dominates cost.
-	// Returned only when the granules analysis ran (?granules=true or ?verbose=true)
-	// and at least one statement reads a MergeTree table. Paired with
-	// MagnitudeScore as the two headline score axes.
 	SelectivityScore *float64 `json:"selectivityScore,omitempty"`
-	// MagnitudeScore is the headline *cost* for this query (0-100; higher = less
-	// data scanned = cheaper), a separate axis from SelectivityScore. Selectivity
-	// is how good the index pruning *ratio* is, while MagnitudeScore reflects the
-	// *absolute* rows the query would scan (from EXPLAIN ESTIMATE), since a query
-	// can prune 99% of granules and still scan billions of rows on a huge table.
-	// Derived on a log scale from the estimated rows of the heaviest statement.
-	// Returned only when the estimate analysis ran (?estimate=true or ?verbose=true)
-	// and at least one statement has an estimate. The two scores are kept separate
-	// (not fused) so a caller can see which axis — selectivity or magnitude — is
-	// the problem.
 	MagnitudeScore *float64 `json:"magnitudeScore,omitempty"`
-	// Statements are the underlying ClickHouse statement(s) this query renders to,
-	// in execution order. Builder, ClickHouse SQL, and trace-operator queries
-	// render exactly one; a PromQL query renders one per metric selector (the
-	// Prometheus engine issues a statement per selector). Empty for a
-	// validation-only preview, a query that failed to render (see Error), or one
-	// that resolves to no data (a fully-missing metric, see Warnings).
 	Statements []PreviewStatement `json:"statements,omitempty"`
 }
 
-// PreviewStatement is one rendered ClickHouse statement the query will execute,
-// with its bound args and — when requested — its EXPLAIN ESTIMATE (Estimate) and
-// granule breakdown (Granules). The query/args field names follow the
-// OpenTelemetry db.statement.* convention so an agent consuming the dry-run sees
-// the same keys it would on a span.
+// PreviewStatement is one rendered ClickHouse statement with its args and, when
+// requested, its EXPLAIN ESTIMATE and granule breakdown. The query/args JSON
+// keys follow the OpenTelemetry db.statement.* convention.
 type PreviewStatement struct {
 	Query string `json:"db.statement.query"`
 	Args  []any  `json:"db.statement.args,omitempty"`
-	// Estimate is the parsed ClickHouse EXPLAIN ESTIMATE output, set only for
-	// ?estimate=true (or ?verbose=true): one entry per table the statement reads,
-	// each with the parts/rows/marks ClickHouse estimates it will scan. Parsed
-	// into a struct (rather than the raw tab-separated table) so an agent can read
-	// the absolute cost estimate programmatically — it complements the
-	// ratio-based Granules.
 	Estimate []EstimateEntry `json:"estimate,omitempty"`
-	// Granules is the parsed granule-skip breakdown for this statement (candidate
-	// vs. surviving granules and the resulting skip score). Populated only for
-	// ?granules=true (or ?verbose=true) when the statement reads a MergeTree
-	// table, so an agent can see why a statement is (un)selective, not just the
-	// headline score.
 	Granules *Granules `json:"granules,omitempty"`
 }
 
-// EstimateEntry is ClickHouse's EXPLAIN ESTIMATE for one table the statement
-// reads: the parts, rows, and marks it estimates it will scan. Unlike Granules
-// (a pruning ratio), these are absolute counts, so they convey how much data a
-// statement touches in real terms.
+// EstimateEntry is ClickHouse's EXPLAIN ESTIMATE for one table read: the
+// absolute parts, rows, and marks it estimates it will scan.
 type EstimateEntry struct {
 	Database string `json:"database"`
 	Table    string `json:"table"`
@@ -183,47 +117,26 @@ type EstimateEntry struct {
 	Marks    int64  `json:"marks"`
 }
 
-// Granules is the granule-skip breakdown for one rendered statement, parsed from
-// ClickHouse's `EXPLAIN json = 1, indexes = 1` index analysis. Granules are the
-// unit of read in a MergeTree table; the fewer that survive pruning, the less
-// data the query reads. Summed across every ReadFromMergeTree node in the plan
-// so a multi-read statement is scored as a whole.
+// Granules is the granule-skip breakdown for one statement, parsed from
+// `EXPLAIN json = 1, indexes = 1` and summed across every ReadFromMergeTree node.
 type Granules struct {
-	// Initial is the candidate granules before any pruning.
 	Initial int64 `json:"initial"`
-	// Selected is the granules surviving partition/primary-key/skip-index pruning
-	// — the ones the query would actually read.
 	Selected int64 `json:"selected"`
-	// Skipped is Initial - Selected: granules eliminated before any read.
 	Skipped int64 `json:"skipped"`
-	// SkipScore is 100 * Skipped / Initial, rounded to two decimals (0-100;
-	// higher = more selective).
 	SkipScore float64 `json:"skipScore"`
-	// Reads is the raw per-read index-pruning trace behind the aggregate above:
-	// one entry per ReadFromMergeTree node in the plan, each listing the index
-	// steps in the order ClickHouse applies them. It shows *which* index did the
-	// pruning and which did nothing — a step whose selected == initial pruned no
-	// granules (its index isn't engaging), and a read still selecting many
-	// granules after every step is a candidate for a new index. Empty when the
-	// plan exposes no MergeTree index analysis.
 	Reads []MergeTreeRead `json:"reads,omitempty"`
 }
 
-// MergeTreeRead is the index-pruning funnel for one ReadFromMergeTree node — one
-// physical read of one table. The Steps run in sequence, so each step's Initial*
-// matches the previous step's Selected*: the list reads as a funnel from
-// candidate parts/granules down to what survives and is actually read.
+// MergeTreeRead is the index-pruning funnel for one ReadFromMergeTree node. The
+// Steps run in sequence, so each step's Initial* matches the previous Selected*.
 type MergeTreeRead struct {
-	// Table is the table this node reads, e.g. "signoz_logs.logs_v2".
 	Table string `json:"table"`
-	// Steps are the index steps applied to this read, in execution order.
 	Steps []IndexStep `json:"steps"`
 }
 
 // IndexStep is one index applied during a MergeTree read, with the parts and
-// granules entering it (Initial*) and surviving it (Selected*). Type is the
-// ClickHouse index kind (MinMax, Partition, PrimaryKey, or Skip); Name is set
-// for skip indexes; Keys/Condition describe what it matched on.
+// granules entering (Initial*) and surviving (Selected*) it. Type is the index
+// kind (MinMax, Partition, PrimaryKey, or Skip).
 type IndexStep struct {
 	Type             string   `json:"type"`
 	Name             string   `json:"name,omitempty"`
@@ -235,10 +148,8 @@ type IndexStep struct {
 	SelectedGranules int64    `json:"selectedGranules"`
 }
 
-// MarshalJSON renders Error as the structured error form (code, message and,
-// when present, suggestions/invalidReferences) instead of the default {} that a
-// bare error interface produces, so an agent consuming the dry-run can act on it
-// programmatically.
+// MarshalJSON renders Error in its structured form (code/message/suggestions)
+// rather than the empty object a bare error produces.
 func (p QueryPreview) MarshalJSON() ([]byte, error) {
 	type alias QueryPreview
 	out := struct {
@@ -246,7 +157,7 @@ func (p QueryPreview) MarshalJSON() ([]byte, error) {
 		Error *errors.JSON `json:"error,omitempty"`
 	}{alias: alias(p)}
 	out.alias.Error = nil
-	// Derive the verdict from the error so callers can't desync the two.
+	// Derive the verdict so the two can't desync.
 	out.Valid = p.Error == nil
 	if p.Error != nil {
 		out.Error = errors.AsJSON(p.Error)

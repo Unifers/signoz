@@ -74,12 +74,8 @@ func (handler *handler) QueryRange(rw http.ResponseWriter, req *http.Request) {
 	render.Success(rw, http.StatusOK, queryRangeResponse)
 }
 
-// QueryRangePreview is the dry-run counterpart of QueryRange. It accepts the
-// same payload, validates and renders the underlying SQL/PromQL for each query
-// without executing it, and returns the per-query statements. ?verbose defaults
-// to true: each rendered statement carries its ClickHouse EXPLAIN ESTIMATE and
-// granule index analysis (with the top-level scores). ?verbose=false returns the
-// lightweight verdict-only response with no rendered SQL.
+// QueryRangePreview is the dry-run counterpart of QueryRange: it validates and
+// renders each query without executing it.
 func (handler *handler) QueryRangePreview(rw http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	ctx = ctxtypes.NewContextWithCommentVals(ctx, map[string]string{
@@ -99,10 +95,8 @@ func (handler *handler) QueryRangePreview(rw http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	// NB: validation is intentionally NOT done here. QueryRangePreview checks
-	// request-level invariants (aborting on failure) and validates each query's
-	// spec individually, reporting per-query structural errors in the response
-	// instead of failing fast on the first one — the point of the dry-run.
+	// Validation is deferred to QueryRangePreview, which validates each query
+	// individually and reports per-query errors instead of failing fast.
 
 	orgID, err := valuer.NewUUID(claims.OrgID)
 	if err != nil {
@@ -110,8 +104,6 @@ func (handler *handler) QueryRangePreview(rw http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	// verbose defaults to true (full preview); ?verbose=false returns the
-	// lightweight verdict-only response.
 	previewParams := qbtypes.QueryRangePreviewParams{Verbose: req.URL.Query().Get("verbose")}
 	previewOpts, err := previewParams.Validate()
 	if err != nil {

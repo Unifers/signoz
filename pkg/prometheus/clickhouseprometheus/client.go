@@ -204,10 +204,8 @@ func (client *client) getFingerprintsFromClickhouseQuery(ctx context.Context, qu
 	return fingerprints, nil
 }
 
-// buildSamplesQuery renders the samples SQL (and its args) that fetches the
-// data points for the series selected by subQuery. It embeds the series
-// selection as a subquery, so the returned statement is self-contained — the
-// dry-run/preview path renders it without executing.
+// buildSamplesQuery renders the self-contained samples SQL (and args) that
+// fetches data points for the series selected by subQuery.
 func buildSamplesQuery(start int64, end int64, metricName string, subQuery string, args []any) (string, []any) {
 	argCount := len(args)
 

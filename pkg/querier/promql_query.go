@@ -220,9 +220,8 @@ func (q *promqlQuery) renderVars(query string, vars map[string]qbv5.VariableItem
 	return newQuery.String(), nil
 }
 
-// Statement renders the PromQL query string after variable substitution. It
-// is used by the dry-run/preview path; PromQL queries do not have a
-// SQL-style argument list.
+// Statement renders the PromQL string (no SQL args) without executing it, for
+// the preview path.
 func (q *promqlQuery) Statement(_ context.Context) (*qbv5.Statement, error) {
 	rendered, err := q.renderVars(q.query.Query, q.vars, q.tr.From, q.tr.To)
 	if err != nil {
@@ -231,13 +230,9 @@ func (q *promqlQuery) Statement(_ context.Context) (*qbv5.Statement, error) {
 	return &qbv5.Statement{Query: rendered}, nil
 }
 
-// PreviewStatements returns the underlying ClickHouse statement(s) this PromQL
-// query would run, captured without executing them. PromQL is evaluated by the
-// Prometheus engine rather than compiled to one SQL statement: the engine calls
-// the storage adapter's Select per metric selector, which builds ClickHouse
-// SQL. We drive the engine with a capturing Storage that records that SQL and
-// returns empty results, so nothing is read from ClickHouse. Returns nil when
-// the provider does not support capture (e.g. test doubles).
+// PreviewStatements returns the ClickHouse statement(s) this PromQL query would
+// run, captured by driving the engine with a Storage that records each
+// selector's SQL and returns empty results. Returns nil if capture is unsupported.
 func (q *promqlQuery) PreviewStatements(ctx context.Context) ([]prometheus.CapturedStatement, error) {
 	storer, ok := q.promEngine.(prometheus.StatementCapturer)
 	if !ok {
@@ -270,8 +265,7 @@ func (q *promqlQuery) PreviewStatements(ctx context.Context) ([]prometheus.Captu
 	}
 	defer qry.Close()
 
-	// Evaluate against the capturing storage: this drives a Select per selector
-	// (recording the SQL) but reads no data, so the result is discarded.
+	// Exec drives a Select per selector (recording SQL) but reads no data.
 	if res := qry.Exec(ctx); res.Err != nil {
 		if e := tryEnhancePromQLExecError(res.Err); e != nil {
 			return nil, e

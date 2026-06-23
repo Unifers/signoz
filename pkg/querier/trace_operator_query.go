@@ -32,8 +32,7 @@ func (q *traceOperatorQuery) Window() (uint64, uint64) {
 	return q.fromMS, q.toMS
 }
 
-// Statement renders the SQL statement for the trace operator query without
-// executing it. It is used by the dry-run/preview path.
+// Statement renders the SQL without executing it, for the preview path.
 func (q *traceOperatorQuery) Statement(ctx context.Context) (*qbtypes.Statement, error) {
 	return q.stmtBuilder.Build(ctx, q.fromMS, q.toMS, q.kind, q.spec, q.compositeQuery)
 }

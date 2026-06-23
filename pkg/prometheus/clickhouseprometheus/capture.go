@@ -9,9 +9,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
-// statementRecorder collects the ClickHouse statements a PromQL evaluation would
-// run. It is safe for concurrent use because the Prometheus engine may evaluate
-// (and therefore Select) multiple selectors concurrently.
+// statementRecorder collects the statements a PromQL evaluation would run. Safe
+// for concurrent use: the engine may Select multiple selectors concurrently.
 type statementRecorder struct {
 	mu         sync.Mutex
 	statements []prometheus.CapturedStatement
@@ -31,11 +30,8 @@ func (r *statementRecorder) Statements() []prometheus.CapturedStatement {
 	return out
 }
 
-// captureClient is a remote.ReadClient that builds the same ClickHouse SQL as
-// the real client but records it instead of executing, returning an empty
-// result so the engine completes without touching ClickHouse. It records the
-// self-contained samples query per selector (which embeds the series-selection
-// subquery), so the recorded statement reflects the actual data read.
+// captureClient is a remote.ReadClient that builds the same SQL as the real
+// client but records it and returns an empty result instead of executing.
 type captureClient struct {
 	*client
 	recorder *statementRecorder
@@ -67,8 +63,7 @@ func (c *captureClient) Read(ctx context.Context, query *prompb.Query, _ bool) (
 		}
 	}
 
-	// Build the series-selection subquery and the self-contained samples query
-	// exactly as the executing path would, but only record them.
+	// Build the same queries as the executing path, but only record them.
 	subQuery, args, err := c.queryToClickhouseQuery(ctx, query, metricName, true)
 	if err != nil {
 		return nil, err
@@ -79,8 +74,7 @@ func (c *captureClient) Read(ctx context.Context, query *prompb.Query, _ bool) (
 	return storage.EmptySeriesSet(), nil
 }
 
-// captureQueryable adapts the capturing read client to storage.Queryable,
-// mirroring how the real provider wraps its querier.
+// captureQueryable adapts the capturing read client to storage.Queryable.
 type captureQueryable struct {
 	inner storage.SampleAndChunkQueryable
 }
