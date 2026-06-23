@@ -556,7 +556,7 @@ func (r *QueryRangeRequest) Normalize() error {
 	if r.RequestType == RequestTypeScalar || r.RequestType == RequestTypeTimeSeries {
 		for idx := range r.CompositeQuery.Queries {
 			if r.CompositeQuery.Queries[idx].GetLimit() == 0 && len(r.CompositeQuery.Queries[idx].GetGroupBy()) > 0 {
-				r.CompositeQuery.Queries[idx].SetLimit(100)
+				r.CompositeQuery.Queries[idx].SetLimit(1000)
 			}
 		}
 	}
