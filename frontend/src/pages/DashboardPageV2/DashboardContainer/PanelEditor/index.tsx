@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
 	ResizableHandle,
 	ResizablePanel,
@@ -6,7 +6,7 @@ import {
 	useDefaultLayout,
 } from '@signozhq/ui/resizable';
 import { toast } from '@signozhq/ui/sonner';
-import type {
+import {
 	DashboardtypesPanelDTO,
 	TelemetrytypesSignalDTO,
 } from 'api/generated/services/sigNoz.schemas';
@@ -29,6 +29,7 @@ import { usePanelQuery } from '../hooks/usePanelQuery';
 import { usePanelEditorDraft } from './hooks/usePanelEditorDraft';
 import { usePanelEditorQuerySync } from './hooks/usePanelEditorQuerySync';
 import { usePanelEditorSave } from './hooks/usePanelEditorSave';
+import { usePanelTypeSwitch } from './hooks/usePanelTypeSwitch';
 import { useSeedNewListColumns } from './hooks/useSeedNewListColumns';
 import { useSwitchColumnsOnSignalChange } from './hooks/useSwitchColumnsOnSignalChange';
 import { useTableColumns } from './hooks/useTableColumns';
@@ -108,7 +109,10 @@ function PanelEditorContainer({
 
 	// A new panel defaults to its kind's first supported signal (e.g. List → logs);
 	// drives both the seed query's datasource and the seed of its default columns.
-	const defaultDataSource = panelDefinition?.supportedSignals[0];
+	const defaultDataSource = useMemo(
+		() => panelDefinition?.supportedSignals[0] || TelemetrytypesSignalDTO.metrics,
+		[panelDefinition],
+	);
 
 	const { runQuery, isQueryDirty, buildSaveSpec } = usePanelEditorQuerySync({
 		draft,
@@ -120,6 +124,9 @@ function PanelEditorContainer({
 		alwaysSerializeQuery: isNew,
 		defaultDataSource,
 	});
+
+	// Switch the panel's visualization kind in place (reversible per session).
+	const { onChangePanelKind } = usePanelTypeSwitch({ spec, panelType, setSpec });
 
 	// Spec and query dirtiness are tracked independently so query re-serialization
 	// never false-dirties. A new panel is always savable (you're creating it).
@@ -235,6 +242,7 @@ function PanelEditorContainer({
 						panelKind={draft.spec.plugin.kind}
 						spec={spec}
 						onChangeSpec={setSpec}
+						onChangePanelKind={onChangePanelKind}
 						legendSeries={legendSeries}
 						tableColumns={tableColumns}
 					/>

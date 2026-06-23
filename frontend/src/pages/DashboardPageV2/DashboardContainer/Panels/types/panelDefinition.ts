@@ -1,10 +1,10 @@
 import type { ComponentType } from 'react';
-import { DataSource } from 'types/common/queryBuilder';
 
 import type { SectionConfig } from './sections';
 import type { AnyPanelInteractionProps } from './interactions';
 import type { PanelKind } from './panelKind';
 import type { BaseRendererProps, PanelRendererProps } from './rendererProps';
+import { TelemetrytypesSignalDTO } from 'api/generated/services/sigNoz.schemas';
 
 /**
  * Which panel actions a kind supports. Required field, so registering a new
@@ -35,7 +35,7 @@ export interface PanelDefinition<K extends PanelKind = PanelKind> {
 	displayName: string;
 	Renderer: ComponentType<PanelRendererProps<K>>;
 	sections: SectionConfig[];
-	supportedSignals: DataSource[];
+	supportedSignals: TelemetrytypesSignalDTO[];
 	actions: PanelActionCapabilities;
 }
 
