@@ -2094,6 +2094,45 @@ export interface AuthtypesGettableTokenDTO {
 	tokenType?: string;
 }
 
+export enum CoretypesKindDTO {
+	anonymous = 'anonymous',
+	organization = 'organization',
+	role = 'role',
+	serviceaccount = 'serviceaccount',
+	user = 'user',
+	'notification-channel' = 'notification-channel',
+	'route-policy' = 'route-policy',
+	'apdex-setting' = 'apdex-setting',
+	'auth-domain' = 'auth-domain',
+	session = 'session',
+	'cloud-integration' = 'cloud-integration',
+	'cloud-integration-service' = 'cloud-integration-service',
+	integration = 'integration',
+	dashboard = 'dashboard',
+	'public-dashboard' = 'public-dashboard',
+	'ingestion-key' = 'ingestion-key',
+	'ingestion-limit' = 'ingestion-limit',
+	pipeline = 'pipeline',
+	'user-preference' = 'user-preference',
+	'org-preference' = 'org-preference',
+	'quick-filter' = 'quick-filter',
+	'ttl-setting' = 'ttl-setting',
+	rule = 'rule',
+	'planned-maintenance' = 'planned-maintenance',
+	'saved-view' = 'saved-view',
+	'trace-funnel' = 'trace-funnel',
+	'factor-password' = 'factor-password',
+	'factor-api-key' = 'factor-api-key',
+	license = 'license',
+	subscription = 'subscription',
+	logs = 'logs',
+	traces = 'traces',
+	metrics = 'metrics',
+	'audit-logs' = 'audit-logs',
+	'meter-metrics' = 'meter-metrics',
+	'logs-field' = 'logs-field',
+	'traces-field' = 'traces-field',
+}
 export enum CoretypesTypeDTO {
 	user = 'user',
 	serviceaccount = 'serviceaccount',
@@ -2104,10 +2143,7 @@ export enum CoretypesTypeDTO {
 	telemetryresource = 'telemetryresource',
 }
 export interface CoretypesResourceRefDTO {
-	/**
-	 * @type string
-	 */
-	kind: string;
+	kind: CoretypesKindDTO;
 	type: CoretypesTypeDTO;
 }
 
@@ -2243,12 +2279,12 @@ export interface AuthtypesPostableRoleDTO {
 	/**
 	 * @type string
 	 */
-	description: string;
+	description?: string;
 	/**
 	 * @type string
 	 */
 	name: string;
-	transactionGroups: AuthtypesTransactionGroupsDTO;
+	transactionGroups?: AuthtypesTransactionGroupsDTO;
 }
 
 export interface AuthtypesPostableRotateTokenDTO {
@@ -5499,13 +5535,6 @@ export interface InframonitoringtypesClusterRecordDTO {
 	podCountsByPhase: InframonitoringtypesPodCountsByPhaseDTO;
 }
 
-export interface InframonitoringtypesRequiredMetricsCheckDTO {
-	/**
-	 * @type array,null
-	 */
-	missingMetrics: string[] | null;
-}
-
 export enum InframonitoringtypesResponseTypeDTO {
 	list = 'list',
 	grouped_list = 'grouped_list',
@@ -5541,7 +5570,6 @@ export interface InframonitoringtypesClustersDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesClusterRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5619,7 +5647,6 @@ export interface InframonitoringtypesDaemonSetsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesDaemonSetRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5697,7 +5724,6 @@ export interface InframonitoringtypesDeploymentsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesDeploymentRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5783,7 +5809,6 @@ export interface InframonitoringtypesHostsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesHostRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5869,7 +5894,6 @@ export interface InframonitoringtypesJobsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesJobRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5919,7 +5943,6 @@ export interface InframonitoringtypesNamespacesDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesNamespaceRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -5986,7 +6009,6 @@ export interface InframonitoringtypesNodesDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesNodeRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -6070,7 +6092,6 @@ export interface InframonitoringtypesPodsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesPodRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -6418,7 +6439,6 @@ export interface InframonitoringtypesStatefulSetsDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesStatefulSetRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -6487,7 +6507,6 @@ export interface InframonitoringtypesVolumesDTO {
 	 * @type array
 	 */
 	records: InframonitoringtypesVolumeRecordDTO[];
-	requiredMetricsCheck: InframonitoringtypesRequiredMetricsCheckDTO;
 	/**
 	 * @type integer
 	 */
@@ -10334,9 +10353,14 @@ export type ListMetrics200 = {
 	status: string;
 };
 
-export type GetMetricAlertsPathParameters = {
+export type GetMetricAlertsParams = {
+	/**
+	 * @type string
+	 * @description The name of the metric. May contain slashes (e.g. cloud-provider metrics like run.googleapis.com/request_latencies).
+	 */
 	metricName: string;
 };
+
 export type GetMetricAlerts200 = {
 	data: MetricsexplorertypesMetricAlertsResponseDTO;
 	/**
@@ -10345,18 +10369,20 @@ export type GetMetricAlerts200 = {
 	status: string;
 };
 
-export type GetMetricAttributesPathParameters = {
-	metricName: string;
-};
 export type GetMetricAttributesParams = {
 	/**
+	 * @type string
+	 * @description The name of the metric. May contain slashes (e.g. cloud-provider metrics like run.googleapis.com/request_latencies).
+	 */
+	metricName: string;
+	/**
 	 * @type integer,null
-	 * @description undefined
+	 * @description Start of the time range as a Unix timestamp in milliseconds.
 	 */
 	start?: number | null;
 	/**
 	 * @type integer,null
-	 * @description undefined
+	 * @description End of the time range as a Unix timestamp in milliseconds.
 	 */
 	end?: number | null;
 };
@@ -10369,9 +10395,14 @@ export type GetMetricAttributes200 = {
 	status: string;
 };
 
-export type GetMetricDashboardsPathParameters = {
+export type GetMetricDashboardsParams = {
+	/**
+	 * @type string
+	 * @description The name of the metric. May contain slashes (e.g. cloud-provider metrics like run.googleapis.com/request_latencies).
+	 */
 	metricName: string;
 };
+
 export type GetMetricDashboards200 = {
 	data: MetricsexplorertypesMetricDashboardsResponseDTO;
 	/**
@@ -10380,9 +10411,14 @@ export type GetMetricDashboards200 = {
 	status: string;
 };
 
-export type GetMetricHighlightsPathParameters = {
+export type GetMetricHighlightsParams = {
+	/**
+	 * @type string
+	 * @description The name of the metric. May contain slashes (e.g. cloud-provider metrics like run.googleapis.com/request_latencies).
+	 */
 	metricName: string;
 };
+
 export type GetMetricHighlights200 = {
 	data: MetricsexplorertypesMetricHighlightsResponseDTO;
 	/**
@@ -10391,22 +10427,24 @@ export type GetMetricHighlights200 = {
 	status: string;
 };
 
-export type GetMetricMetadataPathParameters = {
-	metricName: string;
-};
-export type GetMetricMetadata200 = {
-	data: MetricsexplorertypesMetricMetadataDTO;
+export type InspectMetrics200 = {
+	data: MetricsexplorertypesInspectMetricsResponseDTO;
 	/**
 	 * @type string
 	 */
 	status: string;
 };
 
-export type UpdateMetricMetadataPathParameters = {
+export type GetMetricMetadataParams = {
+	/**
+	 * @type string
+	 * @description The name of the metric. May contain slashes (e.g. cloud-provider metrics like run.googleapis.com/request_latencies).
+	 */
 	metricName: string;
 };
-export type InspectMetrics200 = {
-	data: MetricsexplorertypesInspectMetricsResponseDTO;
+
+export type GetMetricMetadata200 = {
+	data: MetricsexplorertypesMetricMetadataDTO;
 	/**
 	 * @type string
 	 */
