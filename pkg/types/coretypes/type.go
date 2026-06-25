@@ -35,6 +35,8 @@ func NewType(input string) (Type, error) {
 		return TypeMetaResource, nil
 	case "telemetryresource":
 		return TypeTelemetryResource, nil
+	case "project":
+		return TypeProject, nil
 	default:
 		return Type{}, errors.Newf(errors.TypeInvalidInput, ErrCodeInvalidType, "invalid type: %s", input)
 	}
@@ -100,6 +102,7 @@ func (typed Type) Enum() []any {
 		TypeOrganization,
 		TypeMetaResource,
 		TypeTelemetryResource,
+		TypeProject,
 	}
 }
 

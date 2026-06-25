@@ -8,6 +8,8 @@ import MultiIngestionSettings from 'container/IngestionSettings/MultiIngestionSe
 import MCPServerSettings from 'container/MCPServerSettings/MCPServerSettings';
 import MySettings from 'container/MySettings';
 import OrganizationSettings from 'container/OrganizationSettings';
+import ProjectDetails from 'container/ProjectDetails/ProjectDetails';
+import ProjectSettings from 'container/ProjectSettings';
 import RolesSettings from 'container/RolesSettings';
 import RoleDetailsPage from 'container/RolesSettings/RoleDetails';
 import { TFunction } from 'i18next';
@@ -143,6 +145,32 @@ export const roleDetails = (t: TFunction): RouteTabProps['routes'] => [
 		),
 		route: ROUTES.ROLE_DETAILS,
 		key: ROUTES.ROLE_DETAILS,
+	},
+];
+
+export const projectSettings = (t: TFunction): RouteTabProps['routes'] => [
+	{
+		Component: ProjectSettings,
+		name: (
+			<div className="periscope-tab">
+				<Building size={16} /> {t('routes:projects').toString()}
+			</div>
+		),
+		route: ROUTES.PROJECTS_SETTINGS,
+		key: ROUTES.PROJECTS_SETTINGS,
+	},
+];
+
+export const projectDetails = (t: TFunction): RouteTabProps['routes'] => [
+	{
+		Component: ProjectDetails,
+		name: (
+			<div className="periscope-tab">
+				<Building size={16} /> {t('routes:project_details').toString()}
+			</div>
+		),
+		route: ROUTES.PROJECT_DETAILS,
+		key: ROUTES.PROJECT_DETAILS,
 	},
 ];
 

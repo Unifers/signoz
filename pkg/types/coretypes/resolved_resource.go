@@ -29,6 +29,27 @@ func NewResolvedResource(
 	return resolved
 }
 
+// NewResolvedResourceWithID builds a ResolvedResource from a pre-computed id.
+// Use when the def itself decides the id (e.g. PerSignalResourceDef which
+// iterates signals and produces one resource per signal).
+func NewResolvedResourceWithID(
+	verb Verb,
+	category ActionCategory,
+	resource Resource,
+	id string,
+	selector SelectorFunc,
+	ec ExtractorContext,
+) ResolvedResource {
+	resolved := &resolvedResource{
+		verb:     verb,
+		category: category,
+		resource: resource,
+		selector: selector,
+		ids:      []string{id},
+	}
+	return resolved
+}
+
 func (resolved *resolvedResource) fill(phase ExtractPhase, ec ExtractorContext) {
 	if id, ok := resolved.idExtractor.RunFor(phase, ec); ok && id != "" {
 		resolved.ids = []string{id}

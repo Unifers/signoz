@@ -1,0 +1,8 @@
+.project-selector {
+	display: inline-block;
+
+	&-logtype {
+		color: var(--text-secondary, #6b7280);
+		font-size: 12px;
+	}
+}

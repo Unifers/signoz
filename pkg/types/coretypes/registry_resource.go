@@ -38,6 +38,7 @@ var Resources = []Resource{
 	ResourceTelemetryResourceMeterMetrics,
 	ResourceMetaResourceLogsField,
 	ResourceMetaResourceTracesField,
+	ResourceProject,
 }
 
 var (
@@ -78,4 +79,5 @@ var (
 	ResourceTelemetryResourceMeterMetrics                = NewResourceTelemetryResource(KindMeterMetrics)
 	ResourceMetaResourceLogsField                        = NewResourceMetaResource(KindLogsField)
 	ResourceMetaResourceTracesField                      = NewResourceMetaResource(KindTracesField)
+	ResourceProject                                      = NewResourceProject()
 )

@@ -27,6 +27,8 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/organization/implorganization"
 	"github.com/SigNoz/signoz/pkg/modules/preference"
 	"github.com/SigNoz/signoz/pkg/modules/preference/implpreference"
+	"github.com/SigNoz/signoz/pkg/modules/project"
+	"github.com/SigNoz/signoz/pkg/modules/project/implproject"
 	"github.com/SigNoz/signoz/pkg/modules/promote"
 	"github.com/SigNoz/signoz/pkg/modules/promote/implpromote"
 	"github.com/SigNoz/signoz/pkg/modules/quickfilter"
@@ -93,6 +95,9 @@ type Modules struct {
 	SpanMapper       spanmapper.Module
 	LLMPricingRule   llmpricingrule.Module
 	Tag              tag.Module
+	ProjectGetter    project.Getter
+	ProjectSetter    project.Setter
+	ProjectBinder    project.Binder
 }
 
 func NewModules(
@@ -122,6 +127,9 @@ func NewModules(
 ) Modules {
 	quickfilter := implquickfilter.NewModule(implquickfilter.NewStore(sqlstore))
 	orgSetter := implorganization.NewSetter(implorganization.NewStore(sqlstore), alertmanager, quickfilter)
+	projectStore := implproject.NewStore(sqlstore)
+	projectGetter := implproject.NewGetter(projectStore)
+	projectSetter := implproject.NewSetter(projectStore)
 	// Cleanup callbacks from other modules, invoked when a user is deleted.
 	onDeleteUser := []user.OnDeleteUser{
 		dashboard.DeletePreferencesForUser,
@@ -157,5 +165,8 @@ func NewModules(
 		SpanMapper:       implspanmapper.NewModule(implspanmapper.NewStore(sqlstore)),
 		LLMPricingRule:   impllmpricingrule.NewModule(impllmpricingrule.NewStore(sqlstore)),
 		Tag:              tagModule,
+		ProjectGetter:    projectGetter,
+		ProjectSetter:    projectSetter,
+		ProjectBinder:    implproject.NewBinding(authz, userGetter),
 	}
 }

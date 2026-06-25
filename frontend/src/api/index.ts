@@ -28,6 +28,20 @@ const queryClient = new QueryClient({
 	},
 });
 
+// ProjectProvider updates `currentProjectHeader` whenever the active
+// (slug, logType) selection changes. The axios interceptor below reads it
+// and attaches X-Signoz-Project to outbound requests so v5 query endpoints
+// can authorize the request against the per-(project, signal, logType) FGA
+// tuple. Stored in a module-level variable (not React state) because
+// interceptors run outside the React tree.
+let currentProjectHeader = '';
+export function setCurrentProjectHeader(value: string): void {
+	currentProjectHeader = value;
+}
+export function getCurrentProjectHeader(): string {
+	return currentProjectHeader;
+}
+
 export const interceptorsResponse = (
 	value: AxiosResponse<any>,
 ): Promise<AxiosResponse<any>> => {
@@ -64,6 +78,14 @@ export const interceptorsRequestResponse = (
 
 	if (value && value.headers) {
 		value.headers.Authorization = token ? `Bearer ${token}` : '';
+
+		// Attach the active (project, logType) header when set. Empty when
+		// no project is selected — leaves the v5 endpoints to fall back to
+		// the existing role-based authz.
+		const projectHeader = currentProjectHeader;
+		if (projectHeader) {
+			value.headers['X-Signoz-Project'] = projectHeader;
+		}
 	}
 
 	return value;

@@ -6,6 +6,7 @@ import { Provider } from 'react-redux';
 import AppRoutes from 'AppRoutes';
 import { AxiosError } from 'axios';
 import { GlobalTimeStoreAdapter } from 'components/GlobalTimeStoreAdapter/GlobalTimeStoreAdapter';
+import ProjectSync from 'hooks/project/ProjectSync';
 import { ThemeProvider } from 'hooks/useDarkMode';
 import { NuqsAdapter } from 'nuqs/adapters/react';
 import { AppProvider } from 'providers/App/App';
@@ -54,6 +55,7 @@ if (container) {
 							<Provider store={store}>
 								<GlobalTimeStoreAdapter />
 								<AppProvider>
+									<ProjectSync />
 									<AppRoutes />
 								</AppProvider>
 							</Provider>

@@ -1,6 +1,10 @@
 package handler
 
-import "github.com/SigNoz/signoz/pkg/types/coretypes"
+import (
+	"strings"
+
+	"github.com/SigNoz/signoz/pkg/types/coretypes"
+)
 
 type ResourceDef interface {
 	// resolveRequest is unexported to seal the interface. It returns a slice so a
@@ -37,6 +41,65 @@ func (def BasicResourceDef) resolveRequest(ec coretypes.ExtractorContext) []core
 			ec,
 		),
 	}
+}
+
+// PerSignalResourceDef fans out into one ResolvedResource per telemetry signal
+// (logs/traces/metrics) present in the request body, each with the same verb
+// and category.
+//
+// The active project is identified by an HTTP header (ProjectHeader) whose
+// value is "<projectSlug>:<logType>". The signal list is read from the
+// request body via SignalsExtractor. The composed resource id is
+// "<projectSlug>:<signal>:<logType>" which ProjectLogTypeSelector parses
+// into per-(project, logType) FGA selectors plus the wildcard fallback.
+//
+// Use this on v5 query endpoints where a single request may touch multiple
+// signals (e.g. a join across logs + traces).
+type PerSignalResourceDef struct {
+	Verb             coretypes.Verb
+	Category         coretypes.ActionCategory
+	ProjectHeader    string
+	SignalsExtractor coretypes.ResourceIDsExtractor
+	Selector         coretypes.SelectorFunc
+}
+
+func (def PerSignalResourceDef) resolveRequest(ec coretypes.ExtractorContext) []coretypes.ResolvedResource {
+	if ec.Request == nil {
+		return nil
+	}
+	headerVal := ec.Request.Header.Get(def.ProjectHeader)
+	if headerVal == "" {
+		return nil
+	}
+	headerParts := strings.SplitN(headerVal, ":", 2)
+	if len(headerParts) != 2 || headerParts[0] == "" || headerParts[1] == "" {
+		return nil
+	}
+	projectSlug, logType := headerParts[0], headerParts[1]
+
+	signals, ok := def.SignalsExtractor.RunFor(coretypes.PhaseRequest, ec)
+	if !ok || len(signals) == 0 {
+		return nil
+	}
+
+	out := make([]coretypes.ResolvedResource, 0, len(signals))
+	for _, signal := range signals {
+		resource, err := coretypes.ResourceForSignal(signal)
+		if err != nil {
+			// Skip unknown signals; the handler will surface a 400 anyway.
+			continue
+		}
+		id := projectSlug + ":" + signal + ":" + logType
+		out = append(out, coretypes.NewResolvedResourceWithID(
+			def.Verb,
+			def.Category,
+			resource,
+			id,
+			def.Selector,
+			ec,
+		))
+	}
+	return out
 }
 
 // AttachDetachSiblingResourceDef checks an attach/detach between peer resources;

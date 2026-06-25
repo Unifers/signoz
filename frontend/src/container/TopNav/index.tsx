@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { matchPath, useHistory } from 'react-router-dom';
 import HeaderRightSection from 'components/HeaderRightSection/HeaderRightSection';
+import ProjectSelector from 'components/ProjectSelector';
 import ROUTES from 'constants/routes';
 
 import NewExplorerCTA from '../NewExplorerCTA';
@@ -44,6 +45,7 @@ function TopNav(): JSX.Element | null {
 
 	return !isRouteToSkip ? (
 		<div className="top-nav-container">
+			<ProjectSelector />
 			<NewExplorerCTA />
 			<DateTimeSelector showAutoRefresh />
 			<HeaderRightSection enableShare enableFeedback enableAnnouncements={false} />

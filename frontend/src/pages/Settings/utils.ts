@@ -12,6 +12,8 @@ import {
 	multiIngestionSettings,
 	mySettings,
 	organizationSettings,
+	projectDetails,
+	projectSettings,
 	roleDetails,
 	rolesSettings,
 	serviceAccountsSettings,
@@ -67,6 +69,8 @@ export const getRoutes = (
 	// Admin-only: members management
 	if (isAdmin) {
 		settings.push(...membersSettings(t));
+		settings.push(...projectSettings(t));
+		settings.push(...projectDetails(t));
 	}
 
 	if ((isCloudUser || isEnterpriseSelfHostedUser) && isAdmin) {

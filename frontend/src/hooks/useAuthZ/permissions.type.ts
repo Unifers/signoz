@@ -9,6 +9,11 @@ export default {
 				allowedVerbs: ['create', 'delete', 'list', 'read', 'update'],
 			},
 			{
+				kind: 'project',
+				type: 'project',
+				allowedVerbs: ['create', 'delete', 'list', 'read', 'update'],
+			},
+			{
 				kind: 'role',
 				type: 'role',
 				allowedVerbs: [
@@ -35,16 +40,37 @@ export default {
 					'update',
 				],
 			},
+			{
+				kind: 'logs',
+				type: 'telemetryresource',
+				allowedVerbs: ['read'],
+			},
+			{
+				kind: 'metrics',
+				type: 'telemetryresource',
+				allowedVerbs: ['read'],
+			},
+			{
+				kind: 'traces',
+				type: 'telemetryresource',
+				allowedVerbs: ['read'],
+			},
 		],
 		relations: {
 			assignee: ['role'],
 			attach: ['metaresource', 'role', 'serviceaccount'],
-			create: ['metaresource', 'role', 'serviceaccount'],
-			delete: ['metaresource', 'role', 'serviceaccount'],
+			create: ['metaresource', 'project', 'role', 'serviceaccount'],
+			delete: ['metaresource', 'project', 'role', 'serviceaccount'],
 			detach: ['metaresource', 'role', 'serviceaccount'],
-			list: ['metaresource', 'role', 'serviceaccount'],
-			read: ['metaresource', 'role', 'serviceaccount'],
-			update: ['metaresource', 'role', 'serviceaccount'],
+			list: ['metaresource', 'project', 'role', 'serviceaccount'],
+			read: [
+				'metaresource',
+				'project',
+				'role',
+				'serviceaccount',
+				'telemetryresource',
+			],
+			update: ['metaresource', 'project', 'role', 'serviceaccount'],
 		},
 	},
 } as const;

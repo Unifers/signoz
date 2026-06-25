@@ -215,6 +215,7 @@ func NewSQLMigrationProviderFactories(
 		sqlmigration.NewRecreateUserDashboardPreferenceFactory(sqlstore, sqlschema),
 		sqlmigration.NewMigrateRecurrenceBoundsFactory(sqlstore),
 		sqlmigration.NewAddDashboardViewFactory(sqlstore, sqlschema),
+		sqlmigration.NewAddProjectFactory(sqlstore, sqlschema),
 	)
 }
 
@@ -312,6 +313,8 @@ func NewAPIServerProviderFactories(orgGetter organization.Getter, authz authz.Au
 			handlers.TraceDetail,
 			handlers.RulerHandler,
 			handlers.StatsHandler,
+			handlers.ProjectHandler,
+			handlers.ProjectBindingHandler,
 		),
 	)
 }

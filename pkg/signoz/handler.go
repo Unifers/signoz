@@ -26,6 +26,8 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/llmpricingrule/impllmpricingrule"
 	"github.com/SigNoz/signoz/pkg/modules/metricsexplorer"
 	"github.com/SigNoz/signoz/pkg/modules/metricsexplorer/implmetricsexplorer"
+	"github.com/SigNoz/signoz/pkg/modules/project"
+	"github.com/SigNoz/signoz/pkg/modules/project/implproject"
 	"github.com/SigNoz/signoz/pkg/modules/quickfilter"
 	"github.com/SigNoz/signoz/pkg/modules/quickfilter/implquickfilter"
 	"github.com/SigNoz/signoz/pkg/modules/rawdataexport"
@@ -82,6 +84,8 @@ type Handlers struct {
 	RulerHandler            ruler.Handler
 	LLMPricingRuleHandler   llmpricingrule.Handler
 	StatsHandler            statsreporter.Handler
+	ProjectHandler          project.Handler
+	ProjectBindingHandler   project.BindingHandler
 }
 
 func NewHandlers(
@@ -129,5 +133,7 @@ func NewHandlers(
 		RulerHandler:            signozruler.NewHandler(rulerService),
 		LLMPricingRuleHandler:   impllmpricingrule.NewHandler(modules.LLMPricingRule),
 		StatsHandler:            statsreporter.NewHandler(statsAggregator),
+		ProjectHandler:          implproject.NewHandler(modules.ProjectGetter, modules.ProjectSetter),
+		ProjectBindingHandler:   implproject.NewBindingHandler(modules.ProjectBinder),
 	}
 }
