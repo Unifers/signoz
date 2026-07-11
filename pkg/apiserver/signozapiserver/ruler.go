@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/SigNoz/signoz/pkg/http/handler"
+	"github.com/SigNoz/signoz/pkg/query-service/app/ruleselector"
 	"github.com/SigNoz/signoz/pkg/types"
 	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	"github.com/SigNoz/signoz/pkg/types/ruletypes"
@@ -11,7 +12,16 @@ import (
 )
 
 func (provider *provider) addRulerRoutes(router *mux.Router) error {
-	if err := router.Handle("/api/v2/rules", handler.New(provider.authzMiddleware.ViewAccess(provider.rulerHandler.ListRules), handler.OpenAPIDef{
+	// perServiceAccess wraps a handler with the per-service project-permission
+	// check. It replaces the legacy EditAccess / ViewAccess wrappers on the
+	// alert CRUD routes, which only checked managed-role membership and would
+	// reject users with custom-role alert permission. Managed-role users
+	// still pass through (EnforceServiceAccess returns Unrestricted=true for
+	// them). The list route is intentionally unwrapped: the handler does its
+	// own per-user filtering, and the middleware would reject empty-bodied
+	// GET requests as service-agnostic.
+	perServiceAccess := ruleselector.EnforceServiceAccess(provider.rulerService, provider.userGetter)
+	if err := router.Handle("/api/v2/rules", handler.New(provider.rulerHandler.ListRules, handler.OpenAPIDef{
 		ID:                  "ListRules",
 		Tags:                []string{"rules"},
 		Summary:             "List alert rules",
@@ -24,7 +34,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules/{id}", handler.New(provider.authzMiddleware.ViewAccess(provider.rulerHandler.GetRuleByID), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules/{id}", handler.New(perServiceAccess(provider.rulerHandler.GetRuleByID), handler.OpenAPIDef{
 		ID:                  "GetRuleByID",
 		Tags:                []string{"rules"},
 		Summary:             "Get alert rule by ID",
@@ -38,7 +48,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules", handler.New(provider.authzMiddleware.EditAccess(provider.rulerHandler.CreateRule), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules", handler.New(perServiceAccess(provider.rulerHandler.CreateRule), handler.OpenAPIDef{
 		ID:                  "CreateRule",
 		Tags:                []string{"rules"},
 		Summary:             "Create alert rule",
@@ -55,7 +65,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules/{id}", handler.New(provider.authzMiddleware.EditAccess(provider.rulerHandler.UpdateRuleByID), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules/{id}", handler.New(perServiceAccess(provider.rulerHandler.UpdateRuleByID), handler.OpenAPIDef{
 		ID:                 "UpdateRuleByID",
 		Tags:               []string{"rules"},
 		Summary:            "Update alert rule",
@@ -70,7 +80,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules/{id}", handler.New(provider.authzMiddleware.EditAccess(provider.rulerHandler.DeleteRuleByID), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules/{id}", handler.New(perServiceAccess(provider.rulerHandler.DeleteRuleByID), handler.OpenAPIDef{
 		ID:                "DeleteRuleByID",
 		Tags:              []string{"rules"},
 		Summary:           "Delete alert rule",
@@ -82,7 +92,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules/{id}", handler.New(provider.authzMiddleware.EditAccess(provider.rulerHandler.PatchRuleByID), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules/{id}", handler.New(perServiceAccess(provider.rulerHandler.PatchRuleByID), handler.OpenAPIDef{
 		ID:                  "PatchRuleByID",
 		Tags:                []string{"rules"},
 		Summary:             "Patch alert rule",
@@ -99,7 +109,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
-	if err := router.Handle("/api/v2/rules/test", handler.New(provider.authzMiddleware.EditAccess(provider.rulerHandler.TestRule), handler.OpenAPIDef{
+	if err := router.Handle("/api/v2/rules/test", handler.New(perServiceAccess(provider.rulerHandler.TestRule), handler.OpenAPIDef{
 		ID:                  "TestRule",
 		Tags:                []string{"rules"},
 		Summary:             "Test alert rule",

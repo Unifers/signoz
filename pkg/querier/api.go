@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/SigNoz/signoz/pkg/analytics"
 	"github.com/SigNoz/signoz/pkg/errors"
 	"github.com/SigNoz/signoz/pkg/factory"
 	"github.com/SigNoz/signoz/pkg/http/binding"
 	"github.com/SigNoz/signoz/pkg/http/render"
+	"github.com/SigNoz/signoz/pkg/modules/user"
 	"github.com/SigNoz/signoz/pkg/types/authtypes"
 	"github.com/SigNoz/signoz/pkg/types/ctxtypes"
 	"github.com/SigNoz/signoz/pkg/types/instrumentationtypes"
@@ -23,13 +25,14 @@ import (
 )
 
 type handler struct {
-	set       factory.ProviderSettings
-	analytics analytics.Analytics
-	querier   Querier
+	set        factory.ProviderSettings
+	analytics  analytics.Analytics
+	querier    Querier
+	userGetter user.Getter
 }
 
-func NewHandler(set factory.ProviderSettings, querier Querier, analytics analytics.Analytics) Handler {
-	return &handler{set: set, querier: querier, analytics: analytics}
+func NewHandler(set factory.ProviderSettings, querier Querier, analytics analytics.Analytics, userGetter user.Getter) Handler {
+	return &handler{set: set, querier: querier, analytics: analytics, userGetter: userGetter}
 }
 
 func (handler *handler) QueryRange(rw http.ResponseWriter, req *http.Request) {
@@ -59,6 +62,11 @@ func (handler *handler) QueryRange(rw http.ResponseWriter, req *http.Request) {
 
 	orgID, err := valuer.NewUUID(claims.OrgID)
 	if err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	if err := handler.restrictQueryRequest(ctx, &queryRangeRequest); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -107,6 +115,11 @@ func (handler *handler) QueryRangePreview(rw http.ResponseWriter, req *http.Requ
 	previewParams := qbtypes.QueryRangePreviewParams{Verbose: req.URL.Query().Get("verbose")}
 	previewOpts, err := previewParams.Validate()
 	if err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	if err := handler.restrictQueryRequest(ctx, &queryRangeRequest); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -186,6 +199,11 @@ func (handler *handler) QueryRawStream(rw http.ResponseWriter, req *http.Request
 
 	orgID, err := valuer.NewUUID(claims.OrgID)
 	if err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	if err := handler.restrictQueryRequest(ctx, &queryRangeRequest); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -321,4 +339,222 @@ func (handler *handler) logEvent(ctx context.Context, referrer string, event *qb
 	}
 
 	handler.analytics.TrackUser(ctx, claims.OrgID, claims.IdentityID(), "Telemetry Query Returned Results", properties)
+}
+
+func (handler *handler) restrictQueryRequest(ctx context.Context, req *qbtypes.QueryRangeRequest) error {
+	if req == nil {
+		return nil
+	}
+
+	unrestricted, _, err := handler.getAllowedProjects(ctx)
+	if err != nil {
+		return err
+	}
+
+	if unrestricted {
+		return nil
+	}
+
+	claims, err := authtypes.ClaimsFromContext(ctx)
+	if err != nil {
+		return nil
+	}
+	if claims.UserID == "" {
+		return nil
+	}
+	userUUID, err := valuer.NewUUID(claims.UserID)
+	if err != nil {
+		return nil
+	}
+	userRoles, err := handler.userGetter.GetRolesByUserID(ctx, userUUID)
+	if err != nil {
+		return err
+	}
+
+	allowedLogServices := make(map[string]*authtypes.LogScope)
+	hasAllProjectsLogAccess := false
+	var allProjectsLogScope *authtypes.LogScope
+
+	allowedTraceServices := make(map[string]struct{})
+	hasAllProjectsTraceAccess := false
+
+	for _, ur := range userRoles {
+		if ur.Role == nil {
+			continue
+		}
+		records, err := ur.Role.ExtractProjectPermissions()
+		if err != nil {
+			continue
+		}
+		for _, record := range records {
+			if record.Logs == "read" {
+				if record.IsAllProjects() {
+					hasAllProjectsLogAccess = true
+					allProjectsLogScope = record.LogScope
+				} else {
+					allowedLogServices[record.Project] = record.LogScope
+				}
+			}
+			if record.Traces == "read" || record.Traces == "write" {
+				if record.IsAllProjects() {
+					hasAllProjectsTraceAccess = true
+				} else {
+					allowedTraceServices[record.Project] = struct{}{}
+				}
+			}
+		}
+	}
+
+	for i, qEnvelope := range req.CompositeQuery.Queries {
+		if qEnvelope.Type != qbtypes.QueryTypeBuilder {
+			continue
+		}
+
+		switch spec := qEnvelope.Spec.(type) {
+		case qbtypes.QueryBuilderQuery[qbtypes.LogAggregation]:
+			handler.applyLogServiceRestriction(&spec, allowedLogServices, hasAllProjectsLogAccess, allProjectsLogScope)
+			req.CompositeQuery.Queries[i].Spec = spec
+		case qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]:
+			handler.applyTraceServiceRestriction(&spec, allowedTraceServices, hasAllProjectsTraceAccess)
+			req.CompositeQuery.Queries[i].Spec = spec
+		}
+	}
+
+	return nil
+}
+
+// applyLogServiceRestriction mutates spec to restrict results to the
+// services (and log_type scopes) the user is allowed to read.
+func (handler *handler) applyLogServiceRestriction(
+	spec *qbtypes.QueryBuilderQuery[qbtypes.LogAggregation],
+	allowedLogServices map[string]*authtypes.LogScope,
+	hasAllProjectsLogAccess bool,
+	allProjectsLogScope *authtypes.LogScope,
+) {
+	if hasAllProjectsLogAccess {
+		if allProjectsLogScope != nil && allProjectsLogScope.Type == "specific" && allProjectsLogScope.Value != "" {
+			scopeCond := fmt.Sprintf("log_type = '%s'", strings.ReplaceAll(allProjectsLogScope.Value, "'", "\\'"))
+			if spec.Filter == nil {
+				spec.Filter = &qbtypes.Filter{Expression: scopeCond}
+			} else if spec.Filter.Expression != "" {
+				spec.Filter.Expression = fmt.Sprintf("(%s) AND (%s)", spec.Filter.Expression, scopeCond)
+			} else {
+				spec.Filter.Expression = scopeCond
+			}
+		}
+		return
+	}
+
+	allowedSvcs := make([]string, 0, len(allowedLogServices))
+	for svc := range allowedLogServices {
+		allowedSvcs = append(allowedSvcs, svc)
+	}
+
+	serviceCondition := buildServiceNameCondition(allowedSvcs)
+	if serviceCondition != "" {
+		specificScopes, hasAllScope := collectLogScopes(allowedLogServices, allowedSvcs)
+		if !hasAllScope && len(specificScopes) > 0 {
+			serviceCondition += fmt.Sprintf(" AND log_type IN (%s)", strings.Join(specificScopes, ", "))
+		}
+	}
+
+	combineWithExistingFilter(spec, serviceCondition)
+}
+
+// applyTraceServiceRestriction mutates spec to restrict results to the
+// services the user is allowed to read traces for. Traces have no log_type
+// dimension, so only service.name is constrained.
+func (handler *handler) applyTraceServiceRestriction(
+	spec *qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation],
+	allowedTraceServices map[string]struct{},
+	hasAllProjectsTraceAccess bool,
+) {
+	if hasAllProjectsTraceAccess {
+		return
+	}
+
+	allowedSvcs := make([]string, 0, len(allowedTraceServices))
+	for svc := range allowedTraceServices {
+		allowedSvcs = append(allowedSvcs, svc)
+	}
+
+	serviceCondition := buildServiceNameCondition(allowedSvcs)
+	combineWithExistingFilterForTrace(spec, serviceCondition)
+}
+
+// buildServiceNameCondition returns the SQL fragment for the service.name
+// constraint, or a sentinel `___NO_ACCESS___` match when the user has no
+// allowed services.
+func buildServiceNameCondition(allowedSvcs []string) string {
+	if len(allowedSvcs) == 0 {
+		return "service.name = '___NO_ACCESS___'"
+	}
+	if len(allowedSvcs) == 1 {
+		return fmt.Sprintf("service.name = '%s'", strings.ReplaceAll(allowedSvcs[0], "'", "\\'"))
+	}
+	escaped := make([]string, 0, len(allowedSvcs))
+	for _, s := range allowedSvcs {
+		escaped = append(escaped, fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", "\\'")))
+	}
+	return fmt.Sprintf("service.name IN (%s)", strings.Join(escaped, ", "))
+}
+
+// collectLogScopes returns the set of log_type values for svcs when all
+// scopes are specific. If any service has an "all" / unset scope, returns
+// hasAllScope=true and the caller should not constrain log_type.
+func collectLogScopes(allowed map[string]*authtypes.LogScope, svcs []string) ([]string, bool) {
+	specific := make([]string, 0, len(svcs))
+	for _, svc := range svcs {
+		scope := allowed[svc]
+		if scope == nil || scope.Type == "all" || scope.Value == "" {
+			return nil, true
+		}
+		specific = append(specific, fmt.Sprintf("'%s'", strings.ReplaceAll(scope.Value, "'", "\\'")))
+	}
+	return specific, false
+}
+
+// combineWithExistingFilter AND-combines serviceCondition with any existing
+// filter expression on the logs spec.
+func combineWithExistingFilter(spec *qbtypes.QueryBuilderQuery[qbtypes.LogAggregation], serviceCondition string) {
+	if serviceCondition == "" {
+		return
+	}
+	if spec.Filter == nil {
+		spec.Filter = &qbtypes.Filter{Expression: serviceCondition}
+		return
+	}
+	if spec.Filter.Expression != "" {
+		spec.Filter.Expression = fmt.Sprintf("(%s) AND (%s)", spec.Filter.Expression, serviceCondition)
+		return
+	}
+	spec.Filter.Expression = serviceCondition
+}
+
+// combineWithExistingFilterForTrace mirrors combineWithExistingFilter for
+// the trace spec.
+func combineWithExistingFilterForTrace(spec *qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation], serviceCondition string) {
+	if serviceCondition == "" {
+		return
+	}
+	if spec.Filter == nil {
+		spec.Filter = &qbtypes.Filter{Expression: serviceCondition}
+		return
+	}
+	if spec.Filter.Expression != "" {
+		spec.Filter.Expression = fmt.Sprintf("(%s) AND (%s)", spec.Filter.Expression, serviceCondition)
+		return
+	}
+	spec.Filter.Expression = serviceCondition
+}
+
+func (handler *handler) getAllowedProjects(ctx context.Context) (unrestricted bool, allowedProjects map[string]bool, err error) {
+	if handler.userGetter == nil {
+		return true, nil, nil
+	}
+	access, err := authtypes.GetUserAllowedProjects(ctx, handler.userGetter)
+	if err != nil {
+		return false, nil, err
+	}
+	return access.Unrestricted, access.Allowed, nil
 }

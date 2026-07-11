@@ -4,6 +4,7 @@ import { FiltersType, QuickFiltersSource } from 'components/QuickFilters/types';
 import { useGetAggregateValues } from 'hooks/queryBuilder/useGetAggregateValues';
 import { useQueryBuilder } from 'hooks/queryBuilder/useQueryBuilder';
 import { useGetQueryKeyValueSuggestions } from 'hooks/querySuggestions/useGetQueryKeyValueSuggestions';
+import { useServicesList } from 'hooks/useServicesList';
 import { quickFiltersAttributeValuesResponse } from 'mocks-server/__mockdata__/customQuickFilters';
 import { rest, server } from 'mocks-server/server';
 import { render, screen, waitFor } from 'tests/test-utils';
@@ -29,6 +30,13 @@ jest.mock('hooks/querySuggestions/useGetQueryKeyValueSuggestions');
 const mockUseGetQueryKeyValueSuggestions = jest.mocked(
 	useGetQueryKeyValueSuggestions,
 );
+
+// Mock the role-aware services list hook. The default below mirrors an
+// unrestricted user (the full aggregator set), so existing tests continue to
+// pass without any per-test changes. Tests that exercise role-based filtering
+// override this mock to restrict the allowed set.
+jest.mock('hooks/useServicesList');
+const mockUseServicesList = jest.mocked(useServicesList);
 
 interface MockFilterConfig {
 	title: string;
@@ -125,6 +133,14 @@ describe('CheckboxFilter - User Flows', () => {
 			isLoading: false,
 			refetch: jest.fn(),
 		} as any);
+
+		// Default: unrestricted user → allow-list equals the full aggregator
+		// set, so the service-name dropdown is unchanged for existing tests.
+		mockUseServicesList.mockReturnValue({
+			data: MOCK_SERVICE_NAMES,
+			isLoading: false,
+			refetch: jest.fn(),
+		} as unknown as UseQueryResult<string[], Error>);
 
 		// Setup MSW server for API calls
 		server.use(
@@ -472,5 +488,64 @@ describe('CheckboxFilter - User Flows', () => {
 		expect(filterForServiceName.key.key).toBe(SERVICE_NAME_KEY);
 		expect(filterForServiceName.op).toBe('in');
 		expect(filterForServiceName.value).toStrictEqual(['mq-kafka', 'otel-demo']);
+	});
+
+	it('hides service names that the user does not have access to (role-based filtering)', async () => {
+		// Restrict the user to only two of the four services the aggregator sees.
+		mockUseServicesList.mockReturnValue({
+			data: [MQ_KAFKA, OTEL_DEMO],
+			isLoading: false,
+			refetch: jest.fn(),
+		} as unknown as UseQueryResult<string[], Error>);
+
+		mockUseQueryBuilder.mockReturnValue(createMockQueryBuilderData(false) as any);
+
+		const mockFilter = createMockFilter({ defaultOpen: true });
+
+		render(
+			<CheckboxFilter
+				filter={mockFilter}
+				source={QuickFiltersSource.LOGS_EXPLORER}
+			/>,
+		);
+
+		// The dropdown should be restricted to the allowed subset — never
+		// 'sample-flask' or 'otlp-python', which the user is not allowed to see.
+		await waitFor(() => {
+			expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+		});
+
+		expect(screen.getByText(MQ_KAFKA)).toBeInTheDocument();
+		expect(screen.getByText(OTEL_DEMO)).toBeInTheDocument();
+		expect(screen.queryByText(SAMPLE_FLASK)).not.toBeInTheDocument();
+		expect(screen.queryByText(OTLP_PYTHON)).not.toBeInTheDocument();
+	});
+
+	it('shows nothing for the service-name dropdown while the allow-list is still loading', async () => {
+		// Allow-list hasn't resolved yet. We must not flash the unfiltered
+		// aggregator values, which would expose services the user can't access.
+		mockUseServicesList.mockReturnValue({
+			data: undefined,
+			isLoading: true,
+			refetch: jest.fn(),
+		} as unknown as UseQueryResult<string[], Error>);
+
+		mockUseQueryBuilder.mockReturnValue(createMockQueryBuilderData(false) as any);
+
+		const mockFilter = createMockFilter({ defaultOpen: true });
+
+		render(
+			<CheckboxFilter
+				filter={mockFilter}
+				source={QuickFiltersSource.LOGS_EXPLORER}
+			/>,
+		);
+
+		// While loading, no service checkboxes should be visible — the parent
+		// renders a skeleton driven by the `isLoading` flag.
+		expect(screen.queryByText(MQ_KAFKA)).not.toBeInTheDocument();
+		expect(screen.queryByText(OTEL_DEMO)).not.toBeInTheDocument();
+		expect(screen.queryByText(SAMPLE_FLASK)).not.toBeInTheDocument();
+		expect(screen.queryByText(OTLP_PYTHON)).not.toBeInTheDocument();
 	});
 });

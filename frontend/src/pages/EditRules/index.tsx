@@ -10,6 +10,7 @@ import type {
 import { AxiosError } from 'axios';
 import Spinner from 'components/Spinner';
 import { QueryParams } from 'constants/query';
+import { StatusCodes } from 'http-status-codes';
 import ROUTES from 'constants/routes';
 import EditRulesContainer from 'container/EditRules';
 import { useNotifications } from 'hooks/useNotifications';
@@ -78,10 +79,15 @@ function EditRules(): JSX.Element {
 		(ruleData === undefined && !isLoading)
 	) {
 		const errorMsg = apiError?.getErrorMessage() || '';
+		const isForbidden = apiError?.getHttpStatusCode() === StatusCodes.FORBIDDEN;
 		return (
 			<div className="edit-rules-container edit-rules-container--error">
 				<Card size="small" className="edit-rules-card">
-					<p className="content">{errorMsg || t('something_went_wrong')}</p>
+					<p className="content">
+						{isForbidden
+							? errorMsg || 'You do not have permission to view this alert rule.'
+							: errorMsg || t('something_went_wrong')}
+					</p>
 					<div className="btn-container">
 						<Button type="default" size="large" onClick={clickHandler}>
 							Return to Alerts Page

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SigNoz/signoz/pkg/query-service/app/ruleselector"
 	"github.com/SigNoz/signoz/pkg/querier"
 	"github.com/SigNoz/signoz/pkg/queryparser"
 
@@ -372,6 +373,20 @@ func (m *Manager) EditRule(ctx context.Context, ruleStr string, id valuer.UUID) 
 	if err := m.validateChannels(ctx, claims.OrgID, &parsedRule); err != nil {
 		return err
 	}
+
+	// If the request omits serviceNames, derive them from `service.name = '...'`
+	// clauses in the rule's composite-query filter. Persisting the resolved
+	// list makes the service boundary explicit on subsequent reads and keeps
+	// EnforceServiceAccess consistent with what the rule actually filters on.
+	if len(parsedRule.ServiceNames) == 0 {
+		if resolved := ruleselector.ServicesFromRulePostable(&parsedRule); len(resolved) > 0 {
+			parsedRule.ServiceNames = resolved
+			if marshaled, mErr := json.Marshal(parsedRule); mErr == nil {
+				ruleStr = string(marshaled)
+			}
+		}
+	}
+
 	existingRule, err := m.ruleStore.GetStoredRule(ctx, id)
 	if err != nil {
 		return err
@@ -572,6 +587,20 @@ func (m *Manager) CreateRule(ctx context.Context, ruleStr string) (*ruletypes.Ge
 	if err := m.validateChannels(ctx, claims.OrgID, &parsedRule); err != nil {
 		return nil, err
 	}
+
+	// If the request omits serviceNames, derive them from `service.name = '...'`
+	// clauses in the rule's composite-query filter. Persisting the resolved
+	// list makes the service boundary explicit on subsequent reads and keeps
+	// EnforceServiceAccess consistent with what the rule actually filters on.
+	if len(parsedRule.ServiceNames) == 0 {
+		if resolved := ruleselector.ServicesFromRulePostable(&parsedRule); len(resolved) > 0 {
+			parsedRule.ServiceNames = resolved
+			if marshaled, mErr := json.Marshal(parsedRule); mErr == nil {
+				ruleStr = string(marshaled)
+			}
+		}
+	}
+
 	now := time.Now()
 	storedRule := &ruletypes.StorableRule{
 		Identifiable: types.Identifiable{

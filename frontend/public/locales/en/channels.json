@@ -80,5 +80,9 @@
   "slack_channel_help": "Specify channel or user, use #channel-name, @username (has to be all lowercase, no whitespace)",
   "api_key_required": "API Key is mandatory",
 	"to_required": "To field is mandatory",
-	"channel_name_required": "Channel name is mandatory"
+	"channel_name_required": "Channel name is mandatory",
+	"tooltip_discord_url": "The URL of the Discord webhook to send alerts to. Learn more about Discord integration in the docs [here](https://signoz.io/docs/alerts-management/notification-channel/discord/).",
+	"field_discord_title": "Title",
+	"field_discord_message": "Message",
+	"placeholder_discord_message": "Message content or template"
 }

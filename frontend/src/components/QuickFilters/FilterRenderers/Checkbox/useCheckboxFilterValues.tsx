@@ -6,8 +6,11 @@ import {
 import { DATA_TYPE_VS_ATTRIBUTE_VALUES_KEY } from 'constants/queryBuilder';
 import { useGetAggregateValues } from 'hooks/queryBuilder/useGetAggregateValues';
 import { useGetQueryKeyValueSuggestions } from 'hooks/querySuggestions/useGetQueryKeyValueSuggestions';
+import { useServicesList } from 'hooks/useServicesList';
 import { DataTypes } from 'types/api/queryBuilder/queryAutocompleteResponse';
 import { DataSource } from 'types/common/queryBuilder';
+
+import { isKeyMatch } from './utils';
 
 interface UseCheckboxFilterValuesProps {
 	filter: IQuickFiltersConfig;
@@ -54,6 +57,26 @@ function useCheckboxFilterValues({
 			},
 		});
 
+	// For the `service.name` filter, intersect the aggregator's values with the
+	// services the current user is permitted to access. The aggregator endpoint
+	// returns every distinct service name in the org's data without consulting
+	// the caller's role, so without this intersection a restricted-role user
+	// sees (and can pick) services they have no access to — e.g. "Arka" — in
+	// the Logs / Traces / Exceptions / External APIs quick-filter dropdown.
+	//
+	// `useServicesList` calls the role-aware `/api/v2/services` endpoint, which
+	// returns the full org list for unrestricted users (Admin / Editor / custom
+	// roles with full access), so this intersection is a no-op for them. For
+	// restricted users the backend already trimmed the response, so the
+	// intersection removes anything not in the allow-list.
+	const isServiceNameFilter = useMemo(
+		() => isKeyMatch(filter.attributeKey.key, 'service.name'),
+		[filter.attributeKey.key],
+	);
+
+	const { data: allowedServices, isLoading: isLoadingAllowedServices } =
+		useServicesList();
+
 	const attributeValues: string[] = useMemo(() => {
 		const dataType = filter.attributeKey.dataType || DataTypes.String;
 
@@ -85,14 +108,38 @@ function useCheckboxFilterValues({
 		}
 
 		const key = DATA_TYPE_VS_ATTRIBUTE_VALUES_KEY[dataType];
-		return (data?.payload?.[key] || []).filter(
+		const aggregatorValues = (data?.payload?.[key] || []).filter(
 			(val) => val !== undefined && val !== null,
 		);
-	}, [data?.payload, filter.attributeKey.dataType, keyValueSuggestions, source]);
+
+		// For service.name, suppress the aggregator values until the allow-list
+		// has loaded so we never flash services the user can't access. The
+		// parent treats `isLoading` as a loading state, so the user just sees
+		// the existing skeleton until the intersection is ready.
+		if (isServiceNameFilter) {
+			if (!allowedServices || allowedServices.length === 0) {
+				return [];
+			}
+			const allowed = new Set(allowedServices);
+			return aggregatorValues.filter((val) => allowed.has(val as string));
+		}
+
+		return aggregatorValues;
+	}, [
+		data?.payload,
+		filter.attributeKey.dataType,
+		keyValueSuggestions,
+		source,
+		isServiceNameFilter,
+		allowedServices,
+	]);
 
 	return {
 		attributeValues,
-		isLoading: isLoading || isLoadingKeyValueSuggestions,
+		isLoading:
+			isLoading ||
+			isLoadingKeyValueSuggestions ||
+			(isServiceNameFilter && isLoadingAllowedServices),
 	};
 }
 

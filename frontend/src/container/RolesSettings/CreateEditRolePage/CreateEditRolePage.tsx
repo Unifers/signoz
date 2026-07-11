@@ -1,16 +1,17 @@
 import { useCallback, useState } from 'react';
 import { matchPath, useHistory, useLocation } from 'react-router-dom';
-import { ArrowLeft, SolidAlertTriangle } from '@signozhq/icons';
+import { ArrowLeft, SolidAlertTriangle, Plus, Trash2 } from '@signozhq/icons';
 import { Button } from '@signozhq/ui/button';
 import { ConfirmDialog } from '@signozhq/ui/dialog';
 import { Input } from '@signozhq/ui/input';
+import { Switch } from '@signozhq/ui/switch';
 import { Typography } from '@signozhq/ui/typography';
-import { Skeleton } from 'antd';
+import { RadioGroup, RadioGroupItem } from '@signozhq/ui/radio-group';
+import { Skeleton, Select, Input as AntdInput } from 'antd';
 import ErrorInPlace from 'components/ErrorInPlace/ErrorInPlace';
 import ROUTES from 'constants/routes';
 import { useRolesFeatureGate } from 'hooks/useRolesFeatureGate';
 import useUrlQuery from 'hooks/useUrlQuery';
-import { useNavigationBlocker } from 'hooks/useNavigationBlocker';
 import AuthZButton from 'lib/authz/components/AuthZButton/AuthZButton';
 import { withAuthZPage } from 'lib/authz/components/withAuthZ/withAuthZPage';
 import { RouterContext } from 'lib/authz/components/withAuthZ/withAuthZ';
@@ -23,6 +24,9 @@ import APIError from 'types/api/error';
 
 import PermissionEditor from './components/PermissionEditor';
 import { useCreateEditRolePageActions } from './useCreateEditRolePageActions';
+import { useNavigationBlocker } from 'hooks/useNavigationBlocker';
+import type { ProjectPermissionRecord } from '../projectPermissionsHelper';
+import { useServicesList } from 'hooks/useServicesList';
 
 import styles from './CreateEditRolePage.module.scss';
 import { BrandedPermission } from 'lib/authz/hooks/useAuthZ/types';
@@ -67,6 +71,8 @@ function CreateEditRolePageContent(): JSX.Element {
 		setEditorMode,
 		resources,
 		setResources,
+		projectPermissions,
+		setProjectPermissions,
 		isLoading,
 		isSaving,
 		hasUnsavedChanges,
@@ -106,6 +112,42 @@ function CreateEditRolePageContent(): JSX.Element {
 		roleId,
 		roleName,
 	]);
+
+	const { data: fetchedServices } = useServicesList();
+	const availableServices = ['All Services', ...(fetchedServices || [])];
+
+	const addServicePermission = useCallback((): void => {
+		setProjectPermissions((prev) => [
+			...prev,
+			{
+				project: availableServices[0],
+				apm: 'none',
+				traces: 'none',
+				logs: 'none',
+				alerts: 'none',
+				externalApi: 'none',
+				logScope: { type: 'all' },
+			},
+		]);
+	}, [setProjectPermissions, availableServices]);
+
+	const updateServicePermission = useCallback(
+		(index: number, updated: Partial<ProjectPermissionRecord>): void => {
+			setProjectPermissions((prev) => {
+				const next = [...prev];
+				next[index] = { ...next[index], ...updated };
+				return next;
+			});
+		},
+		[setProjectPermissions],
+	);
+
+	const removeServicePermission = useCallback(
+		(index: number): void => {
+			setProjectPermissions((prev) => prev.filter((_, i) => i !== index));
+		},
+		[setProjectPermissions],
+	);
 
 	if (!isRolesEnabled && !isFeatureGateLoading) {
 		return (
@@ -276,6 +318,212 @@ function CreateEditRolePageContent(): JSX.Element {
 							/>
 						</div>
 					</div>
+				</div>
+
+				<div className={styles.projectSection}>
+					<div className={styles.projectSectionHeader}>
+						<div>
+							<Typography.Title level={4} style={{ margin: 0 }}>
+								Service-Scoped Access Controls
+							</Typography.Title>
+							<Typography
+								style={{ color: '#8c9ba5', fontSize: '13px', marginTop: '4px' }}
+							>
+								Configure service-specific APM, Traces, Logs, and Alerts permissions for
+								this role.
+							</Typography>
+						</div>
+						<Button
+							variant="outlined"
+							color="secondary"
+							onClick={addServicePermission}
+							data-testid="add-project-permission-button"
+						>
+							<Plus size={14} style={{ marginRight: '6px' }} />
+							Add Service Scope
+						</Button>
+					</div>
+
+					{projectPermissions.length === 0 ? (
+						<div
+							style={{
+								color: '#8c9ba5',
+								fontSize: '13px',
+								textAlign: 'center',
+								padding: '24px 0',
+							}}
+						>
+							No service-scoped permissions defined. This role will have standard
+							workspace-wide access.
+						</div>
+					) : (
+						<div className={styles.projectRowList}>
+							{projectPermissions.length > 0 && (
+								<div className={styles.projectGridHeader}>
+									<div>Service Name</div>
+									<div>Access Controls</div>
+									<div />
+								</div>
+							)}
+							{projectPermissions.map((item, index) => (
+								<div key={index} className={styles.projectRow}>
+									<div className={styles.projectRowGrid}>
+										<div className={styles.projectCell}>
+											<span className={styles.projectCellLabel}>Service Name</span>
+											<Select
+												value={item.project}
+												onChange={(val): void =>
+													updateServicePermission(index, { project: val })
+												}
+												style={{ width: '100%', minWidth: '100px' }}
+											>
+												{availableServices.map((proj) => (
+													<Select.Option key={proj} value={proj}>
+														{proj}
+													</Select.Option>
+												))}
+											</Select>
+										</div>
+
+										<div className={styles.permissionsCol}>
+											<div
+												className={styles.permissionsRow}
+												style={{ marginBottom: '10px', marginLeft: '20px' }}
+											>
+												<div className={styles.permissionField}>
+													<span className={styles.permissionLabel}>APM</span>
+													<Select
+														value={item.apm}
+														onChange={(val): void =>
+															updateServicePermission(index, { apm: val })
+														}
+														style={{ width: '160px' }}
+													>
+														<Select.Option value="none">None</Select.Option>
+														<Select.Option value="read">Read</Select.Option>
+														<Select.Option value="write">Read & Write</Select.Option>
+													</Select>
+												</div>
+
+												<div className={styles.permissionField}>
+													<span className={styles.permissionLabel}>Traces</span>
+													<Select
+														value={item.traces}
+														onChange={(val): void =>
+															updateServicePermission(index, { traces: val })
+														}
+														style={{ width: '160px' }}
+													>
+														<Select.Option value="none">None</Select.Option>
+														<Select.Option value="read">Read</Select.Option>
+														<Select.Option value="write">Read & Write</Select.Option>
+													</Select>
+												</div>
+											</div>
+
+											<div
+												className={styles.permissionsRow}
+												style={{ marginLeft: '20px' }}
+											>
+												<div className={styles.permissionField}>
+													<span className={styles.permissionLabel}>Alerts</span>
+													<Select
+														value={item.alerts || 'none'}
+														onChange={(val): void =>
+															updateServicePermission(index, { alerts: val })
+														}
+														style={{ width: '160px' }}
+													>
+														<Select.Option value="none">None</Select.Option>
+														<Select.Option value="read">Read</Select.Option>
+														<Select.Option value="write">Read & Write</Select.Option>
+													</Select>
+												</div>
+
+												<div className={styles.permissionField}>
+													<span>External APIs</span>
+													<Switch
+														value={item.externalApi === 'read'}
+														onChange={(checked): void =>
+															updateServicePermission(index, {
+																externalApi: checked ? 'read' : 'none',
+															})
+														}
+													/>
+												</div>
+
+												<div className={styles.permissionField}>
+													<span>Logs</span>
+													<Switch
+														value={item.logs === 'read'}
+														onChange={(checked): void => {
+															updateServicePermission(index, {
+																logs: checked ? 'read' : 'none',
+																logScope: checked
+																	? item.logScope || { type: 'all' }
+																	: undefined,
+															});
+														}}
+													/>
+												</div>
+											</div>
+										</div>
+
+										<div className={styles.deleteCell}>
+											<Button
+												variant="outlined"
+												color="destructive"
+												onClick={(): void => removeServicePermission(index)}
+												className={styles.deleteButton}
+												title="Remove Service Scope"
+											>
+												<Trash2 size={14} />
+											</Button>
+										</div>
+									</div>
+
+									{item.logs === 'read' && (
+										<div className={styles.logScopeSection}>
+											<span className={styles.logScopeLabel}>Log Scope:</span>
+											<RadioGroup
+												value={item.logScope?.type || 'all'}
+												onChange={(value): void => {
+													const scopeType = value as 'all' | 'specific';
+													updateServicePermission(index, {
+														logScope: {
+															type: scopeType,
+															value:
+																scopeType === 'specific'
+																	? item.logScope?.value || ''
+																	: undefined,
+														},
+													});
+												}}
+											>
+												<RadioGroupItem value="all">All Log Types</RadioGroupItem>
+												<RadioGroupItem value="specific">Specific Log Type</RadioGroupItem>
+											</RadioGroup>
+
+											{item.logScope?.type === 'specific' && (
+												<div className={styles.logScopeInputWrapper}>
+													<AntdInput
+														placeholder="e.g. nginx-access, application-json"
+														value={item.logScope.value || ''}
+														onChange={(e): void =>
+															updateServicePermission(index, {
+																logScope: { type: 'specific', value: e.target.value },
+															})
+														}
+														style={{ width: '250px' }}
+													/>
+												</div>
+											)}
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					)}
 				</div>
 
 				<div className={styles.createEditRolePageDivider} />

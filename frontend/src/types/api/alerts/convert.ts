@@ -87,6 +87,13 @@ export function toPostableRuleDTO(
 		version: local.version,
 		disabled: local.disabled,
 		description: (local as unknown as RuletypesPostableRuleDTO).description,
+		// Send `null` (not `[]`) when nothing is selected so the backend
+		// treats the rule as service-agnostic and the field is omitted on
+		// the wire via the Go-side `omitempty`.
+		serviceNames:
+			local.serviceNames && local.serviceNames.length > 0
+				? local.serviceNames
+				: null,
 	};
 	return payload as unknown as RuletypesPostableRuleDTO;
 }
@@ -112,6 +119,11 @@ export function toPostableRuleDTOFromAlertDef(
 		version: local.version,
 		disabled: local.disabled,
 		description: (local as unknown as RuletypesPostableRuleDTO).description,
+		serviceNames:
+			(local as unknown as { serviceNames?: string[] }).serviceNames &&
+			(local as unknown as { serviceNames: string[] }).serviceNames.length > 0
+				? (local as unknown as { serviceNames: string[] }).serviceNames
+				: null,
 	};
 	return payload;
 }

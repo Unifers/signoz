@@ -61,7 +61,7 @@ func TestNewHandlers(t *testing.T) {
 	retentionGetter := implretention.NewGetter(implretention.NewStore(sqlstore))
 	modules := NewModules(sqlstore, tokenizer, emailing, providerSettings, orgGetter, alertmanager, nil, nil, nil, nil, nil, nil, nil, queryParser, Config{}, dashboardModule, userGetter, userRoleStore, nil, nil, nil, retentionGetter, flagger, tagModule, nil)
 
-	querierHandler := querier.NewHandler(providerSettings, nil, nil)
+	querierHandler := querier.NewHandler(providerSettings, nil, nil, nil)
 	registryHandler := factory.NewHandler(nil)
 	handlers := NewHandlers(modules, providerSettings, nil, querierHandler, nil, nil, nil, nil, nil, nil, nil, registryHandler, alertmanager, nil, nil)
 	reflectVal := reflect.ValueOf(handlers)

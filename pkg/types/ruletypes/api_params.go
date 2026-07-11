@@ -60,6 +60,14 @@ type PostableRule struct {
 	Labels        map[string]string `json:"labels,omitempty"`
 	Annotations   map[string]string `json:"annotations,omitempty"`
 
+	// ServiceNames is the explicit set of services this rule is scoped to.
+	// It is the authoritative source for service-based access control on the
+	// rule: when set, the rule is visible to users who hold a project
+	// permission record for at least one of these services. Nil or empty
+	// means the rule is service-agnostic and is only visible to users with
+	// an "All Services" project permission record.
+	ServiceNames []string `json:"serviceNames,omitempty"`
+
 	Disabled bool `json:"disabled"`
 
 	// Source captures the source url where rule has been created

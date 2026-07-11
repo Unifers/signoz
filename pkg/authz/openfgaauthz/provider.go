@@ -84,7 +84,18 @@ func (provider *provider) Get(ctx context.Context, orgID valuer.UUID, id valuer.
 }
 
 func (provider *provider) GetWithTransactionGroups(ctx context.Context, orgID valuer.UUID, id valuer.UUID) (*authtypes.RoleWithTransactionGroups, error) {
-	return nil, errors.Newf(errors.TypeUnsupported, authtypes.ErrCodeRoleUnsupported, "not implemented")
+	role, err := provider.store.Get(ctx, orgID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	tuples, err := provider.readAllTuplesForRole(ctx, role.Name, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	transactionGroups := authtypes.MustNewTransactionGroupsFromTuples(tuples)
+	return authtypes.MakeRoleWithTransactionGroups(role, transactionGroups), nil
 }
 
 func (provider *provider) GetByOrgIDAndName(ctx context.Context, orgID valuer.UUID, name string) (*authtypes.Role, error) {
@@ -181,20 +192,117 @@ func (provider *provider) CreateManagedUserRoleTransactions(ctx context.Context,
 	return provider.Grant(ctx, orgID, []string{authtypes.SigNozAdminRoleName}, authtypes.MustNewSubject(coretypes.NewResourceUser(), userID.String(), orgID, nil))
 }
 
-func (setter *provider) Create(_ context.Context, _ valuer.UUID, _ *authtypes.RoleWithTransactionGroups) error {
-	return errors.Newf(errors.TypeUnsupported, authtypes.ErrCodeRoleUnsupported, "not implemented")
+func (provider *provider) Create(ctx context.Context, orgID valuer.UUID, role *authtypes.RoleWithTransactionGroups) error {
+	existingRole, err := provider.GetByOrgIDAndName(ctx, orgID, role.Name)
+	if err != nil && !errors.Asc(err, authtypes.ErrCodeRoleNotFound) {
+		return err
+	}
+
+	if existingRole != nil {
+		return errors.Newf(errors.TypeAlreadyExists, authtypes.ErrCodeRoleAlreadyExists, "role with name: %s already exists", existingRole.Name)
+	}
+
+	tuples, err := authtypes.NewTuplesFromTransactionGroups(role.Name, orgID, role.TransactionGroups)
+	if err != nil {
+		return err
+	}
+
+	err = provider.Write(ctx, tuples, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := provider.store.Create(ctx, role.Role); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (provider *provider) GetOrCreate(_ context.Context, _ valuer.UUID, _ *authtypes.Role) (*authtypes.Role, error) {
-	return nil, errors.Newf(errors.TypeUnsupported, authtypes.ErrCodeRoleUnsupported, "not implemented")
+func (provider *provider) GetOrCreate(ctx context.Context, orgID valuer.UUID, role *authtypes.Role) (*authtypes.Role, error) {
+	existingRole, err := provider.store.GetByOrgIDAndName(ctx, role.OrgID, role.Name)
+	if err != nil {
+		if !errors.Ast(err, errors.TypeNotFound) {
+			return nil, err
+		}
+	}
+
+	if existingRole != nil {
+		return existingRole, nil
+	}
+
+	err = provider.store.Create(ctx, role)
+	if err != nil {
+		return nil, err
+	}
+
+	return role, nil
 }
 
-func (provider *provider) Update(_ context.Context, _ valuer.UUID, _ *authtypes.RoleWithTransactionGroups) error {
-	return errors.Newf(errors.TypeUnsupported, authtypes.ErrCodeRoleUnsupported, "not implemented")
+func (provider *provider) Update(ctx context.Context, orgID valuer.UUID, updatedRole *authtypes.RoleWithTransactionGroups) error {
+	existingRole, err := provider.GetWithTransactionGroups(ctx, orgID, updatedRole.ID)
+	if err != nil {
+		return err
+	}
+
+	additions, deletions := existingRole.TransactionGroups.Diff(updatedRole.TransactionGroups)
+	additionTuples, err := authtypes.NewTuplesFromTransactionGroups(existingRole.Name, orgID, additions)
+	if err != nil {
+		return err
+	}
+
+	deletionTuples, err := authtypes.NewTuplesFromTransactionGroups(existingRole.Name, orgID, deletions)
+	if err != nil {
+		return err
+	}
+
+	err = provider.Write(ctx, additionTuples, deletionTuples)
+	if err != nil {
+		return err
+	}
+
+	return provider.store.Update(ctx, orgID, updatedRole.Role)
 }
 
-func (provider *provider) Delete(_ context.Context, _ valuer.UUID, _ valuer.UUID) error {
-	return errors.Newf(errors.TypeUnsupported, authtypes.ErrCodeRoleUnsupported, "not implemented")
+func (provider *provider) Delete(ctx context.Context, orgID valuer.UUID, id valuer.UUID) error {
+	role, err := provider.GetWithTransactionGroups(ctx, orgID, id)
+	if err != nil {
+		return err
+	}
+
+	err = role.ErrIfManaged()
+	if err != nil {
+		return err
+	}
+
+	tuples, err := authtypes.NewTuplesFromTransactionGroups(role.Name, orgID, role.TransactionGroups)
+	if err != nil {
+		return err
+	}
+
+	if err := provider.Write(ctx, nil, tuples); err != nil {
+		return errors.WithAdditionalf(err, "failed to delete tuples for the role: %s", role.Name)
+	}
+
+	return provider.store.Delete(ctx, orgID, id)
+}
+
+func (provider *provider) readAllTuplesForRole(ctx context.Context, roleName string, orgID valuer.UUID) ([]*openfgav1.TupleKey, error) {
+	subject := authtypes.MustNewSubject(coretypes.NewResourceRole(), roleName, orgID, &coretypes.VerbAssignee)
+
+	tuples := make([]*openfgav1.TupleKey, 0)
+	for _, objectType := range provider.registry.Types() {
+		typeTuples, err := provider.ReadTuples(ctx, &openfgav1.ReadRequestTupleKey{
+			User:   subject,
+			Object: objectType.StringValue() + ":",
+		})
+		if err != nil {
+			return nil, err
+		}
+		tuples = append(tuples, typeTuples...)
+	}
+
+	return tuples, nil
 }
 
 func (provider *provider) CheckTransactions(ctx context.Context, subject string, orgID valuer.UUID, transactions []*authtypes.Transaction) ([]*authtypes.TransactionWithAuthorization, error) {

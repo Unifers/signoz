@@ -127,11 +127,13 @@ const dummyColumns: ColumnsType<DataType> = [
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export default function BillingContainer(): JSX.Element {
 	const { t } = useTranslation(['billings']);
-	const daysRemainingStr = t('days_remaining');
 	const [headerText, setHeaderText] = useState('');
 	const [billAmount, setBillAmount] = useState(0);
 	const [daysRemaining, setDaysRemaining] = useState(0);
 	const [isFreeTrial, setIsFreeTrial] = useState(false);
+	const daysRemainingStr = isFreeTrial
+		? t('days_remaining_free_trial')
+		: t('days_remaining');
 	const [data, setData] = useState<DataType[]>([]);
 	const [apiResponse, setApiResponse] = useState<
 		Partial<UsageResponsePayloadProps>

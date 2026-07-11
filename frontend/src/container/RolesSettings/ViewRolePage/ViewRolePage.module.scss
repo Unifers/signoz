@@ -208,3 +208,28 @@
 	flex: 1;
 	min-height: 0;
 }
+
+.projectSection {
+	background: #0f1318;
+	border: 1px solid var(--l1-border);
+	border-radius: 8px;
+	padding: var(--spacing-6);
+	margin-top: var(--spacing-4);
+}
+
+.projectGrid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--spacing-3);
+	margin-top: var(--spacing-2);
+}
+
+.projectBadge {
+	background: #14181f;
+	border: 1px solid #222b35;
+	border-radius: 6px;
+	padding: var(--spacing-4);
+	color: #d1d5db;
+	font-size: 13px;
+	line-height: var(--line-height-20);
+}

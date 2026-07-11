@@ -72,6 +72,52 @@ type Role struct {
 	OrgID       valuer.UUID   `bun:"org_id,type:string" json:"orgId" required:"true"`
 }
 
+type LogScope struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+type ProjectPermissionRecord struct {
+	Project     string    `json:"project"`
+	APM         string    `json:"apm"`
+	Traces      string    `json:"traces"`
+	Logs        string    `json:"logs"`
+	Alerts      string    `json:"alerts"`
+	ExternalApi string    `json:"externalApi"`
+	LogScope    *LogScope `json:"logScope"`
+}
+
+// AllProjectsMarker is the literal project name used by a ProjectPermissionRecord
+// to grant unrestricted service access. The frontend serializes it as
+// "All Services" (see frontend/src/container/RolesSettings/projectPermissionsHelper.ts);
+// "All Projects" is accepted on read for backward compatibility with legacy data.
+const AllProjectsMarker = "All Services"
+
+func (r ProjectPermissionRecord) IsAllProjects() bool {
+	return r.Project == "All Projects" || r.Project == AllProjectsMarker
+}
+
+
+type SignozMetadata struct {
+	ProjectPermissions []ProjectPermissionRecord `json:"projectPermissions"`
+}
+
+var metadataRegex = regexp.MustCompile(`\[signoz_metadata:(.*)\]`)
+
+func (role *Role) ExtractProjectPermissions() ([]ProjectPermissionRecord, error) {
+	match := metadataRegex.FindStringSubmatch(role.Description)
+	if len(match) < 2 {
+		return nil, nil
+	}
+	var meta SignozMetadata
+	err := json.Unmarshal([]byte(match[1]), &meta)
+	if err != nil {
+		return nil, err
+	}
+	return meta.ProjectPermissions, nil
+}
+
+
 type RoleWithTransactionGroups struct {
 	*Role
 	TransactionGroups TransactionGroups `json:"transactionGroups" required:"true" nullable:"false"`
@@ -154,6 +200,96 @@ func (role *RoleWithTransactionGroups) Update(description string, transactionGro
 	role.TransactionGroups = transactionGroups
 	role.UpdatedAt = time.Now()
 	return nil
+}
+
+// UserAllowedProjects describes which service names (project permissions) a
+// user is permitted to access. Unrestricted users (managed roles, or any user
+// with at least one record that grants All Services) see everything; the
+// Allowed map is only meaningful when Unrestricted is false.
+type UserAllowedProjects struct {
+	Unrestricted bool
+	Allowed      map[string]bool
+}
+
+// Includes reports whether the given service name is permitted for the user.
+// Unrestricted users are always permitted; otherwise the name must appear in
+// the Allowed map.
+func (p UserAllowedProjects) Includes(serviceName string) bool {
+	if p.Unrestricted {
+		return true
+	}
+	return p.Allowed[serviceName]
+}
+
+// GetUserAllowedProjects resolves the service-level access set for the user
+// identified by claims in ctx. It is the single source of truth for project
+// permission filtering used across services, query-service, and querier
+// handlers. Returns Unrestricted=true for managed-role users (admin, editor,
+// viewer, anonymous) and for custom-role users who hold an "All Services"
+// record; for the empty-custom-role case it returns an empty Allowed map so
+// callers default-deny.
+func GetUserAllowedProjects(ctx context.Context, getter GetUserAllowedProjectsGetter) (UserAllowedProjects, error) {
+	if getter == nil {
+		return UserAllowedProjects{Unrestricted: true, Allowed: nil}, nil
+	}
+
+	claims, err := ClaimsFromContext(ctx)
+	if err != nil || claims.UserID == "" {
+		return UserAllowedProjects{Unrestricted: true, Allowed: nil}, nil
+	}
+
+	userUUID, err := valuer.NewUUID(claims.UserID)
+	if err != nil {
+		return UserAllowedProjects{Unrestricted: true, Allowed: nil}, nil
+	}
+
+	userRoles, err := getter.GetRolesByUserID(ctx, userUUID)
+	if err != nil {
+		return UserAllowedProjects{}, err
+	}
+
+	for _, ur := range userRoles {
+		if ur.Role != nil && ur.Role.Type == RoleTypeManaged {
+			return UserAllowedProjects{Unrestricted: true, Allowed: nil}, nil
+		}
+	}
+
+	allowed := make(map[string]bool)
+	hasCustomRole := false
+	hasAllProjectsAccess := false
+
+	for _, ur := range userRoles {
+		if ur.Role == nil {
+			continue
+		}
+		hasCustomRole = true
+		records, err := ur.Role.ExtractProjectPermissions()
+		if err != nil {
+			continue
+		}
+		for _, record := range records {
+			if record.IsAllProjects() {
+				hasAllProjectsAccess = true
+			}
+			allowed[record.Project] = true
+		}
+	}
+
+	if !hasCustomRole {
+		return UserAllowedProjects{Unrestricted: false, Allowed: map[string]bool{}}, nil
+	}
+
+	if hasAllProjectsAccess {
+		return UserAllowedProjects{Unrestricted: true, Allowed: nil}, nil
+	}
+
+	return UserAllowedProjects{Unrestricted: false, Allowed: allowed}, nil
+}
+
+// GetUserAllowedProjectsGetter is the narrow contract GetUserAllowedProjects
+// needs from the user module. user.Getter satisfies this interface.
+type GetUserAllowedProjectsGetter interface {
+	GetRolesByUserID(ctx context.Context, userID valuer.UUID) ([]*UserRole, error)
 }
 
 func (role *Role) ErrIfManaged() error {

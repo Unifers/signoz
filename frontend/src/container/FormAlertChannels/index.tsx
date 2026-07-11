@@ -13,6 +13,7 @@ import {
 	PagerChannel,
 	SlackChannel,
 	WebhookChannel,
+	DiscordChannel,
 } from 'container/CreateAlertChannels/config';
 import history from 'lib/history';
 
@@ -22,6 +23,7 @@ import OpsgenieSettings from './Settings/Opsgenie';
 import PagerSettings from './Settings/Pager';
 import SlackSettings from './Settings/Slack';
 import WebhookSettings from './Settings/Webhook';
+import DiscordSettings from './Settings/Discord';
 import { Button } from './styles';
 
 function FormAlertChannels({
@@ -53,6 +55,8 @@ function FormAlertChannels({
 				return <OpsgenieSettings setSelectedConfig={setSelectedConfig} />;
 			case ChannelType.Email:
 				return <EmailSettings setSelectedConfig={setSelectedConfig} />;
+			case ChannelType.Discord:
+				return <DiscordSettings setSelectedConfig={setSelectedConfig} />;
 			default:
 				return null;
 		}
@@ -129,6 +133,9 @@ function FormAlertChannels({
 						<Select.Option value="msteams" key="msteams" data-testid="select-option">
 							Microsoft Teams
 						</Select.Option>
+						<Select.Option value="discord" key="discord" data-testid="select-option">
+							Discord
+						</Select.Option>
 					</Select>
 				</Form.Item>
 
@@ -176,7 +183,8 @@ interface FormAlertChannelsProps {
 					WebhookChannel &
 					PagerChannel &
 					OpsgenieChannel &
-					EmailChannel
+					EmailChannel &
+					DiscordChannel
 			>
 		>
 	>;

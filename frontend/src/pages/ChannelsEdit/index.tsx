@@ -14,6 +14,7 @@ import {
 	PagerChannel,
 	SlackChannel,
 	WebhookChannel,
+	DiscordChannel,
 } from 'container/CreateAlertChannels/config';
 import EditAlertChannels from 'container/EditAlertChannels';
 import { SuccessResponseV2 } from 'types/api';
@@ -59,9 +60,17 @@ function ChannelsEdit(): JSX.Element {
 
 	const prepChannelConfig = (): {
 		type: string;
-		channel: SlackChannel & WebhookChannel & PagerChannel & MsTeamsChannel;
+		channel: SlackChannel &
+			WebhookChannel &
+			PagerChannel &
+			MsTeamsChannel &
+			DiscordChannel;
 	} => {
-		let channel: SlackChannel & WebhookChannel & PagerChannel & MsTeamsChannel = {
+		let channel: SlackChannel &
+			WebhookChannel &
+			PagerChannel &
+			MsTeamsChannel &
+			DiscordChannel = {
 			name: '',
 		};
 		if (value && 'slack_configs' in value) {
@@ -69,6 +78,15 @@ function ChannelsEdit(): JSX.Element {
 			channel = slackConfig;
 			return {
 				type: ChannelType.Slack,
+				channel,
+			};
+		}
+
+		if (value && 'discord_configs' in value) {
+			const discordConfig = value.discord_configs[0];
+			channel = discordConfig;
+			return {
+				type: ChannelType.Discord,
 				channel,
 			};
 		}

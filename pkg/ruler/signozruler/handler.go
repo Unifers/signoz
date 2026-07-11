@@ -9,6 +9,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/errors"
 	"github.com/SigNoz/signoz/pkg/http/binding"
 	"github.com/SigNoz/signoz/pkg/http/render"
+	"github.com/SigNoz/signoz/pkg/modules/user"
 	"github.com/SigNoz/signoz/pkg/ruler"
 	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	"github.com/SigNoz/signoz/pkg/types/authtypes"
@@ -18,11 +19,12 @@ import (
 )
 
 type handler struct {
-	ruler ruler.Ruler
+	ruler     ruler.Ruler
+	userGetter user.Getter
 }
 
-func NewHandler(ruler ruler.Ruler) ruler.Handler {
-	return &handler{ruler: ruler}
+func NewHandler(ruler ruler.Ruler, userGetter user.Getter) ruler.Handler {
+	return &handler{ruler: ruler, userGetter: userGetter}
 }
 
 func (handler *handler) ListRules(rw http.ResponseWriter, req *http.Request) {
@@ -35,12 +37,38 @@ func (handler *handler) ListRules(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Per-user visibility: a rule is shown if the caller's project permissions
+	// overlap any of the rule's ServiceNames. Unrestricted users (managed
+	// roles, "All Services" record) see everything. Rules with no
+	// ServiceNames are visible only to unrestricted users.
+	access, err := authtypes.GetUserAllowedProjects(ctx, handler.userGetter)
+	if err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	view := make([]*ruletypes.Rule, 0, len(rules.Rules))
 	for _, rule := range rules.Rules {
+		if !access.Unrestricted && !visibleToUser(rule.ServiceNames, access) {
+			continue
+		}
 		view = append(view, ruletypes.NewRule(rule))
 	}
 
 	render.Success(rw, http.StatusOK, view)
+}
+
+// visibleToUser reports whether at least one of services is in access.Allowed.
+func visibleToUser(services []string, access authtypes.UserAllowedProjects) bool {
+	if access.Unrestricted {
+		return true
+	}
+	for _, s := range services {
+		if access.Includes(s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (handler *handler) GetRuleByID(rw http.ResponseWriter, req *http.Request) {

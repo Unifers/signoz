@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/SigNoz/signoz/pkg/alertmanager/alertmanagernotify/discord"
 	"github.com/SigNoz/signoz/pkg/alertmanager/alertmanagernotify/email"
 	"github.com/SigNoz/signoz/pkg/alertmanager/alertmanagernotify/msteamsv2"
 	"github.com/SigNoz/signoz/pkg/alertmanager/alertmanagernotify/opsgenie"
@@ -24,6 +25,7 @@ var customNotifierIntegrations = []string{
 	opsgenie.Integration,
 	slack.Integration,
 	msteamsv2.Integration,
+	discord.Integration,
 }
 
 func NewReceiverIntegrations(nc *alertmanagertypes.Receiver, tmpl *template.Template, logger *slog.Logger, templater alertmanagertypes.Templater) ([]notify.Integration, error) {
@@ -73,6 +75,9 @@ func NewReceiverIntegrations(nc *alertmanagertypes.Receiver, tmpl *template.Temp
 		add(msteamsv2.Integration, i, c, func(l *slog.Logger) (notify.Notifier, error) {
 			return msteamsv2.New(c, tmpl, `{{ template "msteamsv2.default.titleLink" . }}`, l, templater)
 		})
+	}
+	for i, c := range nc.DiscordConfigs {
+		add(discord.Integration, i, c, func(l *slog.Logger) (notify.Notifier, error) { return discord.New(c, tmpl, l, templater) })
 	}
 
 	if errs.Len() > 0 {

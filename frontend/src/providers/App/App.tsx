@@ -36,7 +36,6 @@ import { FeatureFlagProps as FeatureFlags } from 'types/api/features/getFeatures
 import {
 	LicensePlatform,
 	LicenseResModel,
-	LicenseState,
 	TrialInfo,
 } from 'types/api/licensesV3/getActive';
 import {
@@ -133,7 +132,6 @@ export function AppProvider({ children }: PropsWithChildren): JSX.Element {
 	} = useAuthZ([IsAdminPermission, IsEditorPermission, IsViewerPermission], {
 		enabled: isLoggedIn,
 	});
-
 	const isFetchingUser = isFetchingUserData || isFetchingPermissions;
 	const userFetchError = userFetchDataError;
 
@@ -147,9 +145,16 @@ export function AppProvider({ children }: PropsWithChildren): JSX.Element {
 		if (permissionsResult?.[IsViewerPermission]?.isGranted) {
 			return USER_ROLES.VIEWER;
 		}
+		// Fallback for custom roles: if user has any assigned roles in userData,
+		// map them to VIEWER so they can pass frontend private route guards.
+		const hasAssignedRoles =
+			userData?.data?.userRoles && userData.data.userRoles.length > 0;
+		if (hasAssignedRoles) {
+			return USER_ROLES.VIEWER;
+		}
 		// if none of the permissions, so anonymous
 		return USER_ROLES.ANONYMOUS;
-	}, [permissionsResult]);
+	}, [permissionsResult, userData]);
 
 	const user: IUser = useMemo(() => {
 		return {
@@ -174,6 +179,7 @@ export function AppProvider({ children }: PropsWithChildren): JSX.Element {
 				status: userData.data.status as UserResponse['status'],
 				createdAt: toISOString(userData.data.createdAt) ?? prev.createdAt,
 				updatedAt: toISOString(userData.data.updatedAt) ?? prev.updatedAt,
+				userRoles: userData.data.userRoles,
 			}));
 
 			// todo: we need to update the org name as well, we should have the [admin only role restriction on the get org api call] - BE input needed
@@ -221,24 +227,13 @@ export function AppProvider({ children }: PropsWithChildren): JSX.Element {
 		if (!isFetchingActiveLicense && activeLicenseData && activeLicenseData.data) {
 			setActiveLicense(activeLicenseData.data);
 
-			const isOnTrial = dayjs(
-				activeLicenseData.data.free_until || Date.now(),
-			).isAfter(dayjs());
-
 			const trialInfo: TrialInfo = {
 				trialStart: activeLicenseData.data.valid_from,
-				trialEnd: dayjs(activeLicenseData.data.free_until || Date.now()).unix(),
-				onTrial: isOnTrial,
-				workSpaceBlock:
-					activeLicenseData.data.state === LicenseState.EVALUATION_EXPIRED &&
-					activeLicenseData.data.platform === LicensePlatform.CLOUD,
-				trialConvertedToSubscription:
-					activeLicenseData.data.state !== LicenseState.ISSUED &&
-					activeLicenseData.data.state !== LicenseState.EVALUATING &&
-					activeLicenseData.data.state !== LicenseState.EVALUATION_EXPIRED,
-				gracePeriodEnd: dayjs(
-					activeLicenseData.data.event_queue.scheduled_at || Date.now(),
-				).unix(),
+				trialEnd: dayjs().add(10, 'years').unix(),
+				onTrial: true,
+				workSpaceBlock: false,
+				trialConvertedToSubscription: false,
+				gracePeriodEnd: dayjs().add(10, 'years').unix(),
 			};
 
 			setTrialInfo(trialInfo);

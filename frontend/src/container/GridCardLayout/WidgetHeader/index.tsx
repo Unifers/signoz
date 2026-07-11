@@ -264,8 +264,9 @@ function WidgetHeader({
 					<div className="widget-header-title-container">
 						<Tooltip title={fullText} placement="top">
 							<Typography.Text
+								as="span"
 								truncate={1}
-								data-testid={title}
+								data-testid={typeof title === 'string' ? title : undefined}
 								className="widget-header-title"
 							>
 								{truncatedText}

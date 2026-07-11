@@ -54,7 +54,7 @@ function EndPointMetrics({
 				</div>
 
 				<div className="values-row">
-					<Typography.Text className="domain-details-metadata-value">
+					<div className="domain-details-metadata-value">
 						{isLoading || isRefetching ? (
 							<Skeleton.Button active size="small" />
 						) : (
@@ -64,8 +64,8 @@ function EndPointMetrics({
 								</span>
 							</Tooltip>
 						)}
-					</Typography.Text>
-					<Typography.Text className="domain-details-metadata-value">
+					</div>
+					<div className="domain-details-metadata-value">
 						{isLoading || isRefetching ? (
 							<Skeleton.Button active size="small" />
 						) : (
@@ -73,8 +73,8 @@ function EndPointMetrics({
 								{metricsData?.latency !== '-' ? `${metricsData?.latency}ms` : '-'}
 							</Tooltip>
 						)}
-					</Typography.Text>
-					<Typography.Text className="domain-details-metadata-value error-rate">
+					</div>
+					<div className="domain-details-metadata-value error-rate">
 						{isLoading || isRefetching ? (
 							<Skeleton.Button active size="small" />
 						) : (
@@ -103,8 +103,8 @@ function EndPointMetrics({
 								)}
 							</Tooltip>
 						)}
-					</Typography.Text>
-					<Typography.Text className="domain-details-metadata-value">
+					</div>
+					<div className="domain-details-metadata-value">
 						{isLoading || isRefetching ? (
 							<Skeleton.Button active size="small" />
 						) : (
@@ -112,7 +112,7 @@ function EndPointMetrics({
 								{getDisplayValue(metricsData?.lastUsed)}
 							</Tooltip>
 						)}
-					</Typography.Text>
+					</div>
 				</div>
 			</div>
 		</div>

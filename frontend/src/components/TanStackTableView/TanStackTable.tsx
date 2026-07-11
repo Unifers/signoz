@@ -608,7 +608,9 @@ function TanStackTableInner<TData>(
 							<Spin
 								indicator={<Loader className="animate-spin" />}
 								tip="Loading more..."
-							/>
+							>
+								<div />
+							</Spin>
 						</div>
 					)}
 					{showPagination && pagination && (

@@ -12,7 +12,7 @@ require (
 	github.com/SigNoz/signoz-otel-collector v0.144.3
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/antonmedv/expr v1.15.3
-	github.com/bytedance/sonic v1.14.1
+	github.com/bytedance/sonic v1.15.2
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dgraph-io/ristretto/v2 v2.3.0
@@ -113,9 +113,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.9 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
-	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.3.0 // indirect
-	github.com/cloudwego/base64x v0.1.6 // indirect
+	github.com/bytedance/gopkg v0.1.4 // indirect
+	github.com/bytedance/sonic/loader v0.5.1 // indirect
+	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
@@ -257,7 +257,7 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect

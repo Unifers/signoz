@@ -46,10 +46,21 @@ func (middleware *AuthZ) ViewAccess(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		selectors := []coretypes.Selector{
-			coretypes.TypeRole.MustSelector(authtypes.SigNozAdminRoleName),
-			coretypes.TypeRole.MustSelector(authtypes.SigNozEditorRoleName),
-			coretypes.TypeRole.MustSelector(authtypes.SigNozViewerRoleName),
+		roles, err := middleware.authzService.List(ctx, valuer.MustNewUUID(claims.OrgID))
+		var selectors []coretypes.Selector
+		if err == nil && len(roles) > 0 {
+			selectors = make([]coretypes.Selector, 0, len(roles))
+			for _, r := range roles {
+				if r.Name != authtypes.SigNozAnonymousRoleName {
+					selectors = append(selectors, coretypes.TypeRole.MustSelector(r.Name))
+				}
+			}
+		} else {
+			selectors = []coretypes.Selector{
+				coretypes.TypeRole.MustSelector(authtypes.SigNozAdminRoleName),
+				coretypes.TypeRole.MustSelector(authtypes.SigNozEditorRoleName),
+				coretypes.TypeRole.MustSelector(authtypes.SigNozViewerRoleName),
+			}
 		}
 
 		err = middleware.authzService.CheckWithTupleCreation(

@@ -7,19 +7,28 @@ import { SpinerStyle } from './styles';
 function Spinner({ size, tip, height, style }: SpinnerProps): JSX.Element {
 	return (
 		<SpinerStyle height={height} style={style}>
-			<Spin
-				spinning
-				size={size}
-				tip={tip}
-				indicator={
-					<Loader
-						className="animate-spin"
-						role="img"
-						aria-label="loading"
-						size="md"
-					/>
-				}
-			/>
+			<div
+				style={{
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
+					gap: '8px',
+				}}
+			>
+				<Spin
+					spinning
+					size={size}
+					indicator={
+						<Loader
+							className="animate-spin"
+							role="img"
+							aria-label="loading"
+							size="md"
+						/>
+					}
+				/>
+				{tip && <div className="ant-spin-text">{tip}</div>}
+			</div>
 		</SpinerStyle>
 	);
 }
