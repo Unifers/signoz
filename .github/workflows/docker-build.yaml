@@ -6,7 +6,7 @@ name: docker-build
 on:
   push:
     tags:
-      - "v*"           # ONLY triggers when you push a tag like v1.0.0, v2.3.1-rc.1
+      - "vPB-*"        # ONLY triggers on tags like vPB-1.0.0, vPB-2.3.1
   pull_request:
     branches:
       - main           # build only (no push) on PRs — validates the code compiles
