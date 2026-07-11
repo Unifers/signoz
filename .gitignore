@@ -232,3 +232,4 @@ cython_debug/
 pyrightconfig.json
 
 
+deploy/.env

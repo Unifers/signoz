@@ -1,0 +1,187 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SigNoz Enterprise — Production Docker Compose
+#
+# Usage:
+#   1. Copy this entire `deploy/` folder to your server
+#   2. Edit .env with your values (cp .env.example .env)
+#   3. docker compose up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Zookeeper (required by ClickHouse for cluster coordination) ────────────
+  zookeeper:
+    image: signoz/zookeeper:3.7.1
+    container_name: signoz-zookeeper
+    hostname: zookeeper
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -m 2 http://localhost:8080/commands/ruok | grep error | grep null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - signoz-net
+
+  # ── ClickHouse (telemetry storage) ────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.5.6
+    container_name: signoz-clickhouse
+    hostname: clickhouse
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./config/clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml
+      - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./config/clickhouse/custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - clickhouse_user_scripts:/var/lib/clickhouse/user_scripts
+    # ClickHouse ports are NOT exposed publicly — only accessible inside signoz-net
+    expose:
+      - "8123"
+      - "9000"
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "0.0.0.0:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - signoz-net
+
+  # ── ClickHouse schema migrator (runs once then exits) ─────────────────────
+  clickhouse-migrator:
+    image: signoz/signoz-otel-collector:v0.142.0
+    container_name: signoz-clickhouse-migrator
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://clickhouse:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    restart: on-failure
+    networks:
+      - signoz-net
+
+  # ── OTel Collector (receives telemetry from your apps) ────────────────────
+  otel-collector:
+    image: signoz/signoz-otel-collector:v0.142.0
+    container_name: signoz-otel-collector
+    hostname: otel-collector
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      clickhouse-migrator:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=host.name=signoz-host,os.type=linux
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://clickhouse:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate sync check &&
+        /signoz-otel-collector --config=/etc/otel-collector-config.yaml
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"   # OTLP gRPC  — your apps send traces here
+      - "${OTEL_HTTP_PORT:-4318}:4318"   # OTLP HTTP  — your apps send traces here
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:13133"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - signoz-net
+
+  # ── SigNoz Backend + Frontend (the main application) ─────────────────────
+  signoz:
+    image: ${SIGNOZ_IMAGE:-ghcr.io/unifers/signoz:latest}
+    container_name: signoz
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      clickhouse-migrator:
+        condition: service_completed_successfully
+    volumes:
+      - signoz_data:/data
+    # Only accessible via Nginx — not exposed to the internet directly
+    expose:
+      - "8080"
+    environment:
+      - SIGNOZ_INSTRUMENTATION_LOGS_LEVEL=${LOG_LEVEL:-info}
+      - SIGNOZ_SQLSTORE_SQLITE_PATH=/data/signoz.db
+      - SIGNOZ_WEB_ENABLED=true
+      - SIGNOZ_TOKENIZER_JWT_SECRET=${JWT_SECRET}
+      - SIGNOZ_ALERTMANAGER_PROVIDER=signoz
+      - SIGNOZ_TELEMETRYSTORE_PROVIDER=clickhouse
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://clickhouse:9000
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_CLUSTER=cluster
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - signoz-net
+
+  # ── Nginx reverse proxy (HTTPS termination) ───────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: signoz-nginx
+    depends_on:
+      - signoz
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro    # TLS certs from certbot
+      - nginx_logs:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    networks:
+      - signoz-net
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  clickhouse_user_scripts:
+  zookeeper_data:
+  signoz_data:
+  nginx_logs:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  signoz-net:
+    name: signoz-net

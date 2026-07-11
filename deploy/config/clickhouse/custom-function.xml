@@ -1,0 +1,5 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# custom-function.xml — placeholder
+# The actual file is populated by the init-clickhouse container at runtime.
+# Leave this file empty.
+# ─────────────────────────────────────────────────────────────────────────────
