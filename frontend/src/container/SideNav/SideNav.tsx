@@ -75,6 +75,7 @@ import { checkVersionState } from 'utils/app';
 import { isModifierKeyPressed } from 'utils/app';
 import { showErrorNotification } from 'utils/error';
 import { openInNewTab } from 'utils/navigation';
+import { extractProjectPermissions } from 'container/RolesSettings/projectPermissionsHelper';
 
 import signozBrandLogoUrl from '@/assets/Logos/signoz-brand-logo.svg';
 
@@ -252,6 +253,58 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 	const [licenseTag, setLicenseTag] = useState('');
 	const isAdmin = user.role === USER_ROLES.ADMIN;
 	const isEditor = user.role === USER_ROLES.EDITOR;
+
+	const hasExternalApiAccess = useMemo(() => {
+		const userRoles = user?.userRoles;
+		if (!userRoles || userRoles.length === 0) {
+			return (
+				user.role === USER_ROLES.ADMIN ||
+				user.role === USER_ROLES.EDITOR ||
+				user.role === USER_ROLES.VIEWER
+			);
+		}
+
+		const hasManagedRole = userRoles.some((ur) => ur.role?.type === 'managed');
+		if (hasManagedRole) {
+			return true;
+		}
+
+		// For custom roles, check if at least one project has externalApi === 'read'
+		for (const ur of userRoles) {
+			if (!ur.role) {
+				continue;
+			}
+			const { projectPermissions } = extractProjectPermissions(
+				ur.role.description || '',
+			);
+			for (const perm of projectPermissions) {
+				if (perm.externalApi === 'read') {
+					return true;
+				}
+			}
+		}
+		return false;
+	}, [user]);
+
+	const isItemEnabled = useCallback(
+		(item: SidebarItem): boolean => {
+			if (item.key === ROUTES.INTEGRATIONS) {
+				return (isCloudUser || isEnterpriseSelfHostedUser) && (isAdmin || isEditor);
+			}
+			if (item.key === ROUTES.API_MONITORING) {
+				return hasExternalApiAccess;
+			}
+			return item.isEnabled !== false;
+		},
+		[
+			isCloudUser,
+			isEnterpriseSelfHostedUser,
+			isAdmin,
+			isEditor,
+			hasExternalApiAccess,
+		],
+	);
+
 	const isAIAssistantEnabled = useIsAIAssistantEnabled();
 	const aiAssistantActiveConversationId = useAIAssistantStore(
 		(s) => s.activeConversationId,
@@ -285,26 +338,14 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 	}, [userPreferences]);
 
 	const computedSecondaryMenuItems = useMemo(() => {
-		const shouldShowIntegrationsValue =
-			(isCloudUser || isEnterpriseSelfHostedUser) && (isAdmin || isEditor);
-
 		return defaultMoreMenuItems.map((item) => ({
 			...item,
 			isPinned: computedPinnedMenuItems.some(
 				(pinned) => pinned.itemKey === item.itemKey,
 			),
-			isEnabled:
-				item.key === ROUTES.INTEGRATIONS
-					? shouldShowIntegrationsValue
-					: item.isEnabled,
+			isEnabled: isItemEnabled(item),
 		}));
-	}, [
-		computedPinnedMenuItems,
-		isCloudUser,
-		isEnterpriseSelfHostedUser,
-		isAdmin,
-		isEditor,
-	]);
+	}, [computedPinnedMenuItems, isItemEnabled]);
 
 	// Track if we've done the initial sync (to avoid overwriting user actions during session)
 	const hasInitializedRef = useRef(false);
@@ -783,8 +824,8 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 	);
 
 	const moreMenuItems = useMemo(
-		() => secondaryMenuItems.filter((i) => !i.isPinned && i.isEnabled),
-		[secondaryMenuItems],
+		() => secondaryMenuItems.filter((i) => !i.isPinned && isItemEnabled(i)),
+		[secondaryMenuItems, isItemEnabled],
 	);
 
 	// Get active "More" items that should be visible in collapsed state
@@ -1129,10 +1170,7 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 
 								{(pinnedMenuItems.length > 0 || isCollapsed) && (
 									<div className="nav-items-section">
-										{renderNavItems(
-											pinnedMenuItems.filter((item) => item.isEnabled),
-											true,
-										)}
+										{renderNavItems(pinnedMenuItems.filter(isItemEnabled), true)}
 									</div>
 								)}
 							</div>
@@ -1182,14 +1220,8 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 								<div className="nav-items-section">
 									{/* Show all items when expanded, only active items when collapsed */}
 									{isCollapsed
-										? renderNavItems(
-												activeMoreMenuItems.filter((item) => item.isEnabled),
-												true,
-											)
-										: renderNavItems(
-												moreMenuItems.filter((item) => item.isEnabled),
-												true,
-											)}
+										? renderNavItems(activeMoreMenuItems.filter(isItemEnabled), true)
+										: renderNavItems(moreMenuItems.filter(isItemEnabled), true)}
 								</div>
 							</div>
 						)}

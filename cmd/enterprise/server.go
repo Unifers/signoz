@@ -50,6 +50,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/metricreductionrule"
 	"github.com/SigNoz/signoz/pkg/modules/organization"
 	"github.com/SigNoz/signoz/pkg/modules/retention"
+	"github.com/SigNoz/signoz/pkg/modules/user"
 	"github.com/SigNoz/signoz/pkg/modules/rulestatehistory"
 	"github.com/SigNoz/signoz/pkg/modules/serviceaccount"
 	"github.com/SigNoz/signoz/pkg/modules/tag"
@@ -166,8 +167,8 @@ func runServer(ctx context.Context, config signoz.Config, logger *slog.Logger) e
 
 			return factories, "http"
 		},
-		func(ps factory.ProviderSettings, q querier.Querier, a analytics.Analytics) querier.Handler {
-			communityHandler := querier.NewHandler(ps, q, a)
+		func(ps factory.ProviderSettings, q querier.Querier, a analytics.Analytics, ug user.Getter) querier.Handler {
+			communityHandler := querier.NewHandler(ps, q, a, ug)
 			return eequerier.NewHandler(ps, q, communityHandler)
 		},
 		func(sqlStore sqlstore.SQLStore, dashboardModule dashboard.Module, global global.Global, zeus zeus.Zeus, gateway gateway.Gateway, licensing licensing.Licensing, serviceAccount serviceaccount.Module, config cloudintegration.Config) (cloudintegration.Module, error) {

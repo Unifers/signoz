@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 // eslint-disable-next-line no-restricted-imports
-import { connect, useDispatch, useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RouteComponentProps, withRouter } from 'react-router-dom';
 import { useNavigationType } from 'react-router-dom-v5-compat';
 import { RefreshCw, Undo } from '@signozhq/icons';
@@ -25,12 +25,8 @@ import { isValidShortHandDateTimeFormat } from 'lib/getMinMax';
 import getTimeString from 'lib/getTimeString';
 import { cloneDeep, isObject } from 'lodash-es';
 import { useTimezone } from 'providers/Timezone';
-// eslint-disable-next-line no-restricted-imports
-import { bindActionCreators, Dispatch } from 'redux';
-import { ThunkDispatch } from 'redux-thunk';
 import { GlobalTimeLoading, UpdateTimeInterval } from 'store/actions';
 import { AppState } from 'store/reducers';
-import AppActions from 'types/actions';
 import { GlobalReducer } from 'types/reducer/globalTime';
 import { addCustomTimeRange } from 'utils/customTimeRangeUtils';
 import { persistTimeDurationForRoute } from 'utils/metricsTimeStorageUtils';
@@ -62,8 +58,6 @@ function DateTimeSelection({
 	showAutoRefresh,
 	showRefreshText = true,
 	location,
-	updateTimeInterval,
-	globalTimeLoading,
 	showResetButton = false,
 	showOldExplorerCTA = false,
 	defaultRelativeTime = RelativeTimeMap['6hr'] as Time,
@@ -82,6 +76,19 @@ function DateTimeSelection({
 	const { safeNavigate } = useSafeNavigate();
 	const navigationType = useNavigationType(); // Returns 'POP' for back/forward navigation
 	const dispatch = useDispatch();
+
+	const updateTimeInterval = useCallback(
+		(interval: Time | CustomTimeType, dateTimeRange?: [number, number]) => {
+			if (!isModalTimeSelection) {
+				dispatch(UpdateTimeInterval(interval, dateTimeRange));
+			}
+		},
+		[dispatch, isModalTimeSelection],
+	);
+
+	const globalTimeLoading = useCallback(() => {
+		dispatch(GlobalTimeLoading());
+	}, [dispatch]);
 
 	const { maxTime, minTime, selectedTime } = useSelector<
 		AppState,
@@ -807,44 +814,6 @@ DateTimeSelection.defaultProps = {
 	disableUrlSync: false,
 	showRecentlyUsed: true,
 };
-interface DispatchProps {
-	updateTimeInterval: (
-		interval: Time | CustomTimeType,
-		dateTimeRange?: [number, number],
-	) => (dispatch: Dispatch<AppActions>) => void;
-	globalTimeLoading: () => void;
-}
+type Props = DateTimeSelectionV2Props & RouteComponentProps;
 
-const mapDispatchToProps = (
-	dispatch: ThunkDispatch<unknown, unknown, AppActions>,
-	{ isModalTimeSelection }: DateTimeSelectionV2Props,
-): DispatchProps => ({
-	updateTimeInterval: (
-		interval: Time | CustomTimeType,
-		dateTimeRange?: [number, number],
-	): ((dispatch: Dispatch<AppActions>) => void) => {
-		/**
-		 * Updates the global time interval only when not in modal view
-		 *
-		 * @param interval - Selected time interval or custom time range
-		 * @param dateTimeRange - Optional tuple of [startTime, endTime]
-		 * @returns Function that updates redux store with new time interval, or empty function for modal view
-		 *
-		 * When in modal view (isModalTimeSelection=true), we don't want to update the global time state
-		 * as the selection is temporary until the modal is confirmed
-		 */
-		if (!isModalTimeSelection) {
-			return bindActionCreators(UpdateTimeInterval, dispatch)(
-				interval,
-				dateTimeRange,
-			);
-		}
-		// Return empty function for modal view as we don't want to update global state
-		return (): void => {};
-	},
-	globalTimeLoading: bindActionCreators(GlobalTimeLoading, dispatch),
-});
-
-type Props = DateTimeSelectionV2Props & DispatchProps & RouteComponentProps;
-
-export default connect(null, mapDispatchToProps)(withRouter(DateTimeSelection));
+export default withRouter(DateTimeSelection);

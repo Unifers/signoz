@@ -25,9 +25,9 @@ const getChangelogByVersion = async (
 			queryParams = `${queryParams}&populate[features][filters][deployment_type][$notIn]=${excludedDeploymentType}`;
 		}
 
-		const response = await axios.get(`
-			https://cms.signoz.cloud/api/release-changelogs?${queryParams}
-        `);
+		const response = await axios.get(
+			`https://cms.signoz.cloud/api/release-changelogs?${queryParams}`,
+		);
 
 		if (!Array.isArray(response.data.data) || response.data.data.length === 0) {
 			throw new Error('No changelog found!');

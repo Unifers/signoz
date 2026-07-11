@@ -90,7 +90,7 @@ describe('BillingContainer', () => {
 			).resolves.toBeInTheDocument();
 
 			await expect(
-				screen.findByText(/1 days_remaining/i),
+				screen.findByText(/1 days_remaining_free_trial/i),
 			).resolves.toBeInTheDocument();
 
 			const upgradeButtons = await screen.findAllByRole('button', {
@@ -145,8 +145,9 @@ describe('BillingContainer', () => {
 			});
 			expect(manageBillingButton).toBeInTheDocument();
 
-			const dayRemainingInBillingPeriod =
-				await screen.findByText(/1 days_remaining/i);
+			const dayRemainingInBillingPeriod = await screen.findByText(
+				/1 days_remaining_free_trial/i,
+			);
 			expect(dayRemainingInBillingPeriod).toBeInTheDocument();
 
 			await expect(

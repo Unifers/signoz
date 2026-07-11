@@ -49,6 +49,7 @@ function PrivateRoute({ children }: PrivateRouteProps): JSX.Element {
 				[...routes, LIST_LICENSES, SUPPORT_ROUTE].map((e) => {
 					const currentPath = matchPath(pathname, {
 						path: e.path,
+						exact: e.exact,
 					});
 					return [currentPath === null ? null : 'current', e];
 				}),
@@ -67,7 +68,7 @@ function PrivateRoute({ children }: PrivateRouteProps): JSX.Element {
 
 	const { data: usersData, isFetching: isFetchingUsers } = useListUsers({
 		query: {
-			enabled: !isEmpty(orgData) && user.role === 'ADMIN',
+			enabled: isCloudUserVal && !isEmpty(orgData) && user.role === 'ADMIN',
 		},
 	});
 

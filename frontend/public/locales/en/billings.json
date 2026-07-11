@@ -1,5 +1,6 @@
 {
 	"days_remaining": "days remaining in your billing period.",
+	"days_remaining_free_trial": "days remaining in your free trial.",
 	"billing": "Billing",
 	"manage_billing_and_costs": "Manage your billing information, invoices, and monitor costs.",
 	"enterprise_cloud": "Enterprise Cloud",

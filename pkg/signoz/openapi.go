@@ -58,6 +58,8 @@ func NewOpenAPI(ctx context.Context, instrumentation instrumentation.Instrumenta
 	apiserver, err := signozapiserver.NewFactory(
 		struct{ organization.Getter }{},
 		struct{ authz.AuthZ }{},
+		struct{ ruler.Ruler }{},
+		struct{ user.Getter }{},
 		struct{ organization.Handler }{},
 		struct{ user.Handler }{},
 		struct{ session.Handler }{},

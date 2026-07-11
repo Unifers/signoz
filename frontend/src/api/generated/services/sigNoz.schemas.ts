@@ -8385,6 +8385,10 @@ export interface RuletypesPostableRuleDTO {
 	preferredChannels?: string[];
 	ruleType: RuletypesRuleTypeDTO;
 	/**
+	 * @type array
+	 */
+	serviceNames?: string[];
+	/**
 	 * @type string
 	 */
 	schemaVersion?: string;

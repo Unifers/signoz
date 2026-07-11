@@ -53,6 +53,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/query-service/app/querier"
 	querierV2 "github.com/SigNoz/signoz/pkg/query-service/app/querier/v2"
 	"github.com/SigNoz/signoz/pkg/query-service/app/queryBuilder"
+	"github.com/SigNoz/signoz/pkg/query-service/app/ruleselector"
 	tracesV3 "github.com/SigNoz/signoz/pkg/query-service/app/traces/v3"
 	tracesV4 "github.com/SigNoz/signoz/pkg/query-service/app/traces/v4"
 	"github.com/SigNoz/signoz/pkg/query-service/constants"
@@ -484,13 +485,23 @@ func (aH *APIHandler) Respond(w http.ResponseWriter, data interface{}) {
 func (aH *APIHandler) RegisterRoutes(router *mux.Router, am *middleware.AuthZ) {
 	router.HandleFunc("/api/v1/query_range", am.ViewAccess(aH.queryRangeMetrics)).Methods(http.MethodGet)
 	router.HandleFunc("/api/v1/query", am.ViewAccess(aH.queryMetrics)).Methods(http.MethodGet)
-	router.HandleFunc("/api/v1/rules", am.ViewAccess(aH.listRules)).Methods(http.MethodGet)
-	router.HandleFunc("/api/v1/rules/{id}", am.ViewAccess(aH.getRule)).Methods(http.MethodGet)
-	router.HandleFunc("/api/v1/rules", am.EditAccess(aH.createRule)).Methods(http.MethodPost)
-	router.HandleFunc("/api/v1/rules/{id}", am.EditAccess(aH.editRule)).Methods(http.MethodPut)
-	router.HandleFunc("/api/v1/rules/{id}", am.EditAccess(aH.deleteRule)).Methods(http.MethodDelete)
-	router.HandleFunc("/api/v1/rules/{id}", am.EditAccess(aH.patchRule)).Methods(http.MethodPatch)
-	router.HandleFunc("/api/v1/testRule", am.EditAccess(aH.testRule)).Methods(http.MethodPost)
+	// Gate the seven alert CRUD routes on per-service project permissions.
+	// EnforceServiceAccess is the sole gate: managed-role users pass through
+	// (GetUserAllowedProjects returns Unrestricted=true) and restricted users
+	// pass through only when the rule's services are in their allowed set.
+	// am.EditAccess / am.ViewAccess intentionally omitted — they only check
+	// the legacy signoz-admin / signoz-editor / signoz-viewer managed-role
+	// tuples, which would 403 a custom-role user who has alert write
+	// permission on a specific service.
+	enforceRuleServiceAccess := ruleselector.EnforceServiceAccess(aH.ruleManager, aH.Signoz.Modules.UserGetter)
+
+	router.HandleFunc("/api/v1/rules", enforceRuleServiceAccess(aH.listRules)).Methods(http.MethodGet)
+	router.HandleFunc("/api/v1/rules/{id}", enforceRuleServiceAccess(aH.getRule)).Methods(http.MethodGet)
+	router.HandleFunc("/api/v1/rules", enforceRuleServiceAccess(aH.createRule)).Methods(http.MethodPost)
+	router.HandleFunc("/api/v1/rules/{id}", enforceRuleServiceAccess(aH.editRule)).Methods(http.MethodPut)
+	router.HandleFunc("/api/v1/rules/{id}", enforceRuleServiceAccess(aH.deleteRule)).Methods(http.MethodDelete)
+	router.HandleFunc("/api/v1/rules/{id}", enforceRuleServiceAccess(aH.patchRule)).Methods(http.MethodPatch)
+	router.HandleFunc("/api/v1/testRule", enforceRuleServiceAccess(aH.testRule)).Methods(http.MethodPost)
 	router.HandleFunc("/api/v1/rules/{id}/history/stats", am.ViewAccess(aH.getRuleStats)).Methods(http.MethodPost)
 	router.HandleFunc("/api/v1/rules/{id}/history/timeline", am.ViewAccess(aH.getRuleStateHistory)).Methods(http.MethodPost)
 	router.HandleFunc("/api/v1/rules/{id}/history/top_contributors", am.ViewAccess(aH.getRuleStateHistoryTopContributors)).Methods(http.MethodPost)
@@ -1385,6 +1396,19 @@ func (aH *APIHandler) getServicesTopLevelOps(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	access, err := authtypes.GetUserAllowedProjects(r.Context(), aH.Signoz.Modules.UserGetter)
+	if err != nil {
+		aH.logger.ErrorContext(r.Context(), "failed to get allowed projects", slog.Any("error", err))
+	} else if !access.Unrestricted && result != nil {
+		filtered := map[string][]string{}
+		for svc, ops := range *result {
+			if access.Includes(svc) {
+				filtered[svc] = ops
+			}
+		}
+		result = &filtered
+	}
+
 	aH.WriteJSON(w, r, result)
 }
 
@@ -1397,6 +1421,19 @@ func (aH *APIHandler) getServices(w http.ResponseWriter, r *http.Request) {
 	result, apiErr := aH.reader.GetServices(r.Context(), query)
 	if apiErr != nil && aH.HandleError(w, apiErr.Err, http.StatusInternalServerError) {
 		return
+	}
+
+	access, err := authtypes.GetUserAllowedProjects(r.Context(), aH.Signoz.Modules.UserGetter)
+	if err != nil {
+		aH.logger.ErrorContext(r.Context(), "failed to get allowed projects", slog.Any("error", err))
+	} else if !access.Unrestricted && result != nil {
+		filtered := []model.ServiceItem{}
+		for _, item := range *result {
+			if access.Includes(item.ServiceName) {
+				filtered = append(filtered, item)
+			}
+		}
+		result = &filtered
 	}
 
 	aH.WriteJSON(w, r, result)
@@ -1424,9 +1461,385 @@ func (aH *APIHandler) getServicesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	access, err := authtypes.GetUserAllowedProjects(r.Context(), aH.Signoz.Modules.UserGetter)
+	if err != nil {
+		aH.logger.ErrorContext(r.Context(), "failed to get allowed projects", slog.Any("error", err))
+	} else if !access.Unrestricted && result != nil {
+		filtered := []string{}
+		for _, svc := range *result {
+			if access.Includes(svc) {
+				filtered = append(filtered, svc)
+			}
+		}
+		result = &filtered
+	}
+
 	aH.WriteJSON(w, r, result)
 
 }
+
+func (aH *APIHandler) getAllowedProjects(ctx context.Context) (unrestricted bool, allowedProjects map[string]bool, err error) {
+	if aH.Signoz == nil || aH.Signoz.Modules.UserGetter == nil {
+		return true, nil, nil
+	}
+	access, err := authtypes.GetUserAllowedProjects(ctx, aH.Signoz.Modules.UserGetter)
+	if err != nil {
+		return false, nil, err
+	}
+	return access.Unrestricted, access.Allowed, nil
+}
+
+// restrictQueryByService injects service-name (and log_type, for logs) filters
+// into v3 builder queries so a user with a custom role only sees the services
+// they were granted access to. It is a no-op for users with managed roles
+// (admin/editor/viewer/anonymous), for metrics queries, or when the role
+// grants "All Services" access.
+func (aH *APIHandler) restrictQueryByService(ctx context.Context, query *v3.BuilderQuery) error {
+	switch query.DataSource {
+	case v3.DataSourceLogs:
+		return aH.restrictLogsQuery(ctx, query)
+	case v3.DataSourceTraces:
+		return aH.restrictTracesQuery(ctx, query)
+	default:
+		return nil
+	}
+}
+
+func (aH *APIHandler) restrictLogsQuery(ctx context.Context, query *v3.BuilderQuery) error {
+	unrestricted, _, err := aH.getAllowedProjects(ctx)
+	if err != nil {
+		return err
+	}
+
+	if unrestricted {
+		return nil
+	}
+
+	claims, err := authtypes.ClaimsFromContext(ctx)
+	if err != nil {
+		return nil
+	}
+	if claims.UserID == "" {
+		return nil
+	}
+	userUUID, err := valuer.NewUUID(claims.UserID)
+	if err != nil {
+		return nil
+	}
+	userRoles, err := aH.Signoz.Modules.UserGetter.GetRolesByUserID(ctx, userUUID)
+	if err != nil {
+		return err
+	}
+
+	allowedLogServices := make(map[string]*authtypes.LogScope)
+	hasAllProjectsLogAccess := false
+	var allProjectsLogScope *authtypes.LogScope
+
+	for _, ur := range userRoles {
+		if ur.Role == nil {
+			continue
+		}
+		records, err := ur.Role.ExtractProjectPermissions()
+		if err != nil {
+			continue
+		}
+		for _, record := range records {
+			if record.Logs == "read" {
+				if record.IsAllProjects() {
+					hasAllProjectsLogAccess = true
+					allProjectsLogScope = record.LogScope
+				} else {
+					allowedLogServices[record.Project] = record.LogScope
+				}
+			}
+		}
+	}
+
+	var queryServiceFilter *v3.FilterItem
+	if query.Filters != nil {
+		for i := range query.Filters.Items {
+			item := &query.Filters.Items[i]
+			if strings.ToLower(item.Key.Key) == "servicename" {
+				queryServiceFilter = item
+				break
+			}
+		}
+	}
+
+	if hasAllProjectsLogAccess {
+		if allProjectsLogScope != nil && allProjectsLogScope.Type == "specific" && allProjectsLogScope.Value != "" {
+			if query.Filters == nil {
+				query.Filters = &v3.FilterSet{Operator: "AND", Items: []v3.FilterItem{}}
+			}
+			query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+				Key: v3.AttributeKey{
+					Key:      "log_type",
+					DataType: v3.AttributeKeyDataTypeString,
+					Type:     v3.AttributeKeyTypeTag,
+				},
+				Value:    allProjectsLogScope.Value,
+				Operator: v3.FilterOperatorEqual,
+			})
+		}
+		return nil
+	}
+
+	allowedSvcs := []string{}
+	for svc := range allowedLogServices {
+		allowedSvcs = append(allowedSvcs, svc)
+	}
+
+	if len(allowedSvcs) == 0 {
+		if query.Filters == nil {
+			query.Filters = &v3.FilterSet{Operator: "AND", Items: []v3.FilterItem{}}
+		}
+		query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+			Key: v3.AttributeKey{
+				Key:      "servicename",
+				DataType: v3.AttributeKeyDataTypeString,
+				Type:     v3.AttributeKeyTypeResource,
+				IsColumn: true,
+			},
+			Value:    "___NO_ACCESS___",
+			Operator: v3.FilterOperatorEqual,
+		})
+		return nil
+	}
+
+	if queryServiceFilter != nil {
+		svcVal, ok := queryServiceFilter.Value.(string)
+		if ok {
+			scope, allowed := allowedLogServices[svcVal]
+			if !allowed {
+				queryServiceFilter.Value = "___NO_ACCESS___"
+			} else if scope != nil && scope.Type == "specific" && scope.Value != "" {
+				query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+					Key: v3.AttributeKey{
+						Key:      "log_type",
+						DataType: v3.AttributeKeyDataTypeString,
+						Type:     v3.AttributeKeyTypeTag,
+					},
+					Value:    scope.Value,
+					Operator: v3.FilterOperatorEqual,
+				})
+			}
+		} else {
+			queryServiceFilter.Value = "___NO_ACCESS___"
+		}
+	} else {
+		if query.Filters == nil {
+			query.Filters = &v3.FilterSet{Operator: "AND", Items: []v3.FilterItem{}}
+		}
+
+		if len(allowedSvcs) == 1 {
+			query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+				Key: v3.AttributeKey{
+					Key:      "servicename",
+					DataType: v3.AttributeKeyDataTypeString,
+					Type:     v3.AttributeKeyTypeResource,
+					IsColumn: true,
+				},
+				Value:    allowedSvcs[0],
+				Operator: v3.FilterOperatorEqual,
+			})
+			scope := allowedLogServices[allowedSvcs[0]]
+			if scope != nil && scope.Type == "specific" && scope.Value != "" {
+				query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+					Key: v3.AttributeKey{
+						Key:      "log_type",
+						DataType: v3.AttributeKeyDataTypeString,
+						Type:     v3.AttributeKeyTypeTag,
+					},
+					Value:    scope.Value,
+					Operator: v3.FilterOperatorEqual,
+				})
+			}
+		} else {
+			var interfaceSlice []interface{}
+			for _, s := range allowedSvcs {
+				interfaceSlice = append(interfaceSlice, s)
+			}
+			query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+				Key: v3.AttributeKey{
+					Key:      "servicename",
+					DataType: v3.AttributeKeyDataTypeString,
+					Type:     v3.AttributeKeyTypeResource,
+					IsColumn: true,
+				},
+				Value:    interfaceSlice,
+				Operator: v3.FilterOperatorIn,
+			})
+
+			specificScopes := []interface{}{}
+			hasAllScope := false
+			for _, svc := range allowedSvcs {
+				scope := allowedLogServices[svc]
+				if scope == nil || scope.Type == "all" || scope.Value == "" {
+					hasAllScope = true
+					break
+				}
+				specificScopes = append(specificScopes, scope.Value)
+			}
+			if !hasAllScope && len(specificScopes) > 0 {
+				query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+					Key: v3.AttributeKey{
+						Key:      "log_type",
+						DataType: v3.AttributeKeyDataTypeString,
+						Type:     v3.AttributeKeyTypeTag,
+					},
+					Value:    specificScopes,
+					Operator: v3.FilterOperatorIn,
+				})
+			}
+		}
+	}
+
+	return nil
+}
+
+// restrictTracesQuery is the trace counterpart of restrictLogsQuery. Traces
+// have no log_type dimension — only service.name is constrained to the
+// services the user's role permits APM/traces access for.
+func (aH *APIHandler) restrictTracesQuery(ctx context.Context, query *v3.BuilderQuery) error {
+	unrestricted, _, err := aH.getAllowedProjects(ctx)
+	if err != nil {
+		return err
+	}
+
+	if unrestricted {
+		return nil
+	}
+
+	claims, err := authtypes.ClaimsFromContext(ctx)
+	if err != nil {
+		return nil
+	}
+	if claims.UserID == "" {
+		return nil
+	}
+	userUUID, err := valuer.NewUUID(claims.UserID)
+	if err != nil {
+		return nil
+	}
+	userRoles, err := aH.Signoz.Modules.UserGetter.GetRolesByUserID(ctx, userUUID)
+	if err != nil {
+		return err
+	}
+
+	allowedTraceServices := make(map[string]struct{})
+	hasAllProjectsTraceAccess := false
+
+	for _, ur := range userRoles {
+		if ur.Role == nil {
+			continue
+		}
+		records, err := ur.Role.ExtractProjectPermissions()
+		if err != nil {
+			continue
+		}
+		for _, record := range records {
+			if record.Traces == "read" || record.Traces == "write" {
+				if record.IsAllProjects() {
+					hasAllProjectsTraceAccess = true
+					break
+				}
+				allowedTraceServices[record.Project] = struct{}{}
+			}
+		}
+		if hasAllProjectsTraceAccess {
+			break
+		}
+	}
+
+	if hasAllProjectsTraceAccess {
+		return nil
+	}
+
+	// If the user already has a service.name filter, validate it. Otherwise
+	// inject one that matches the allowed services.
+	var queryServiceFilter *v3.FilterItem
+	if query.Filters != nil {
+		for i := range query.Filters.Items {
+			item := &query.Filters.Items[i]
+			if strings.ToLower(item.Key.Key) == "servicename" {
+				queryServiceFilter = item
+				break
+			}
+		}
+	}
+
+	if len(allowedTraceServices) == 0 {
+		ensureFilterSet(query)
+		query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+			Key: v3.AttributeKey{
+				Key:      "servicename",
+				DataType: v3.AttributeKeyDataTypeString,
+				Type:     v3.AttributeKeyTypeResource,
+				IsColumn: true,
+			},
+			Value:    "___NO_ACCESS___",
+			Operator: v3.FilterOperatorEqual,
+		})
+		return nil
+	}
+
+	if queryServiceFilter != nil {
+		svcVal, ok := queryServiceFilter.Value.(string)
+		if !ok {
+			queryServiceFilter.Value = "___NO_ACCESS___"
+			return nil
+		}
+		if _, allowed := allowedTraceServices[svcVal]; !allowed {
+			queryServiceFilter.Value = "___NO_ACCESS___"
+		}
+		return nil
+	}
+
+	ensureFilterSet(query)
+
+	allowedSvcs := make([]string, 0, len(allowedTraceServices))
+	for svc := range allowedTraceServices {
+		allowedSvcs = append(allowedSvcs, svc)
+	}
+
+	if len(allowedSvcs) == 1 {
+		query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+			Key: v3.AttributeKey{
+				Key:      "servicename",
+				DataType: v3.AttributeKeyDataTypeString,
+				Type:     v3.AttributeKeyTypeResource,
+				IsColumn: true,
+			},
+			Value:    allowedSvcs[0],
+			Operator: v3.FilterOperatorEqual,
+		})
+		return nil
+	}
+
+	iface := make([]interface{}, 0, len(allowedSvcs))
+	for _, s := range allowedSvcs {
+		iface = append(iface, s)
+	}
+	query.Filters.Items = append(query.Filters.Items, v3.FilterItem{
+		Key: v3.AttributeKey{
+			Key:      "servicename",
+			DataType: v3.AttributeKeyDataTypeString,
+			Type:     v3.AttributeKeyTypeResource,
+			IsColumn: true,
+		},
+		Value:    iface,
+		Operator: v3.FilterOperatorIn,
+	})
+	return nil
+}
+
+// ensureFilterSet guarantees query.Filters is non-nil with an AND operator.
+func ensureFilterSet(query *v3.BuilderQuery) {
+	if query.Filters == nil {
+		query.Filters = &v3.FilterSet{Operator: "AND", Items: []v3.FilterItem{}}
+	}
+}
+
 
 func (aH *APIHandler) SearchTraces(w http.ResponseWriter, r *http.Request) {
 	params, err := ParseSearchTracesParams(r)
@@ -3644,6 +4057,15 @@ func (aH *APIHandler) QueryRangeV3Format(w http.ResponseWriter, r *http.Request)
 	}
 	queryRangeParams.Version = "v3"
 
+	if queryRangeParams.CompositeQuery != nil {
+		for _, q := range queryRangeParams.CompositeQuery.BuilderQueries {
+			if err := aH.restrictQueryByService(r.Context(), q); err != nil {
+				RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+				return
+			}
+		}
+	}
+
 	aH.Respond(w, queryRangeParams)
 }
 
@@ -3898,6 +4320,15 @@ func (aH *APIHandler) QueryRangeV3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if queryRangeParams.CompositeQuery != nil {
+		for _, q := range queryRangeParams.CompositeQuery.BuilderQueries {
+			if err := aH.restrictQueryByService(r.Context(), q); err != nil {
+				RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+				return
+			}
+		}
+	}
+
 	// add temporality for each metric
 	temporalityErr := aH.PopulateTemporality(r.Context(), orgID, queryRangeParams)
 	if temporalityErr != nil {
@@ -4118,6 +4549,15 @@ func (aH *APIHandler) QueryRangeV4(w http.ResponseWriter, r *http.Request) {
 	}
 	queryRangeParams.Version = "v4"
 
+	if queryRangeParams.CompositeQuery != nil {
+		for _, q := range queryRangeParams.CompositeQuery.BuilderQueries {
+			if err := aH.restrictQueryByService(r.Context(), q); err != nil {
+				RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+				return
+			}
+		}
+	}
+
 	// add temporality for each metric
 	temporalityErr := aH.PopulateTemporality(r.Context(), orgID, queryRangeParams)
 	if temporalityErr != nil {
@@ -4192,6 +4632,103 @@ func (aH *APIHandler) getQueueOverview(w http.ResponseWriter, r *http.Request) {
 	aH.Respond(w, results)
 }
 
+func (aH *APIHandler) restrictExternalApiQuery(ctx context.Context, queryRangeRequest *qbtypes.QueryRangeRequest) error {
+	if aH.Signoz == nil || aH.Signoz.Modules.UserGetter == nil {
+		return nil
+	}
+
+	claims, err := authtypes.ClaimsFromContext(ctx)
+	if err != nil {
+		return nil
+	}
+	if claims.UserID == "" {
+		return nil
+	}
+	userUUID, err := valuer.NewUUID(claims.UserID)
+	if err != nil {
+		return nil
+	}
+
+	userRoles, err := aH.Signoz.Modules.UserGetter.GetRolesByUserID(ctx, userUUID)
+	if err != nil {
+		return err
+	}
+
+	for _, ur := range userRoles {
+		if ur.Role != nil && ur.Role.Type == authtypes.RoleTypeManaged {
+			return nil
+		}
+	}
+
+	allowedServices := make(map[string]bool)
+	hasCustomRole := false
+	hasAllProjectsAccess := false
+
+	for _, ur := range userRoles {
+		if ur.Role == nil {
+			continue
+		}
+		hasCustomRole = true
+		records, err := ur.Role.ExtractProjectPermissions()
+		if err != nil {
+			continue
+		}
+		for _, record := range records {
+			if record.ExternalApi == "read" {
+				if record.IsAllProjects() {
+					hasAllProjectsAccess = true
+					break
+				}
+				allowedServices[record.Project] = true
+			}
+		}
+		if hasAllProjectsAccess {
+			break
+		}
+	}
+
+	if !hasCustomRole || hasAllProjectsAccess {
+		return nil
+	}
+
+	allowedSvcs := make([]string, 0, len(allowedServices))
+	for svc := range allowedServices {
+		allowedSvcs = append(allowedSvcs, svc)
+	}
+
+	for i, q := range queryRangeRequest.CompositeQuery.Queries {
+		if q.Type == qbtypes.QueryTypeBuilder {
+			switch spec := q.Spec.(type) {
+			case qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]:
+				if spec.Filter == nil {
+					spec.Filter = &qbtypes.Filter{}
+				}
+				var serviceFilter string
+				if len(allowedSvcs) == 0 {
+					serviceFilter = "service.name = '___NO_ACCESS___'"
+				} else if len(allowedSvcs) == 1 {
+					serviceFilter = fmt.Sprintf("service.name = '%s'", strings.ReplaceAll(allowedSvcs[0], "'", "\\'"))
+				} else {
+					quotedSvcs := make([]string, len(allowedSvcs))
+					for j, svc := range allowedSvcs {
+						quotedSvcs[j] = fmt.Sprintf("'%s'", strings.ReplaceAll(svc, "'", "\\'"))
+					}
+					serviceFilter = fmt.Sprintf("service.name IN (%s)", strings.Join(quotedSvcs, ", "))
+				}
+				if spec.Filter.Expression == "" {
+					spec.Filter.Expression = serviceFilter
+				} else {
+					spec.Filter.Expression = fmt.Sprintf("(%s) AND (%s)", spec.Filter.Expression, serviceFilter)
+				}
+				queryRangeRequest.CompositeQuery.Queries[i].Spec = spec
+			}
+		}
+	}
+
+	return nil
+}
+
+// getDomainList handles requests for domain listing using v5 query builder
 func (aH *APIHandler) getDomainList(w http.ResponseWriter, r *http.Request) {
 	// Extract claims from context for organization ID
 	claims, err := authtypes.ClaimsFromContext(r.Context())
@@ -4220,6 +4757,12 @@ func (aH *APIHandler) getDomainList(w http.ResponseWriter, r *http.Request) {
 		aH.logger.ErrorContext(r.Context(), "failed to build domain list query", errors.Attr(err))
 		apiErrObj := errors.New(errors.TypeInvalidInput, errors.CodeInvalidInput, err.Error())
 		render.Error(w, apiErrObj)
+		return
+	}
+
+	if err := aH.restrictExternalApiQuery(r.Context(), queryRangeRequest); err != nil {
+		aH.logger.ErrorContext(r.Context(), "failed to restrict domain list query", errors.Attr(err))
+		render.Error(w, err)
 		return
 	}
 
@@ -4280,6 +4823,12 @@ func (aH *APIHandler) getDomainInfo(w http.ResponseWriter, r *http.Request) {
 		aH.logger.ErrorContext(r.Context(), "failed to build domain info query", errors.Attr(err))
 		apiErrObj := errors.New(errors.TypeInvalidInput, errors.CodeInvalidInput, err.Error())
 		render.Error(w, apiErrObj)
+		return
+	}
+
+	if err := aH.restrictExternalApiQuery(r.Context(), queryRangeRequest); err != nil {
+		aH.logger.ErrorContext(r.Context(), "failed to restrict domain info query", errors.Attr(err))
+		render.Error(w, err)
 		return
 	}
 

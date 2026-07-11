@@ -48,6 +48,12 @@ export interface PostableAlertRuleV2 {
 		description: string;
 		summary: string;
 	};
+	// serviceNames is the explicit set of services this alert is scoped to.
+	// When set, the rule is visible only to users whose project permissions
+	// include at least one of these services. When unset (the default), the
+	// rule is service-agnostic and visibility is determined by the
+	// composite-query filter expression.
+	serviceNames?: string[];
 	notificationSettings?: {
 		groupBy?: string[];
 		renotify?: {

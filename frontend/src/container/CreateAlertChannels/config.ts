@@ -104,6 +104,7 @@ export enum ChannelType {
 	Pagerduty = 'pagerduty',
 	Opsgenie = 'opsgenie',
 	MsTeams = 'msteams',
+	Discord = 'discord',
 }
 
 // LabelFilterStatement will be used for preparing filter conditions / matchers
@@ -124,4 +125,10 @@ export interface MsTeamsChannel extends Channel {
 	webhook_url?: string;
 	title?: string;
 	text?: string;
+}
+
+export interface DiscordChannel extends Channel {
+	webhook_url?: string;
+	title?: string;
+	message?: string;
 }

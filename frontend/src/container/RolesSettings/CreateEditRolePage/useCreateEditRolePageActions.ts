@@ -22,6 +22,11 @@ import {
 	type RoleFormData,
 } from './useRoleUnsavedChanges';
 import { useRoleFormValidation } from './useRoleFormValidation';
+import {
+	extractProjectPermissions,
+	serializeProjectPermissions,
+	ProjectPermissionRecord,
+} from '../projectPermissionsHelper';
 
 const EDITOR_MODES: EditorMode[] = ['interactive', 'json'];
 
@@ -32,6 +37,10 @@ interface UseCreateEditRolePageCallbacksResult {
 	setEditorMode: (mode: EditorMode) => void;
 	resources: ResourcePermissions[];
 	setResources: (resources: ResourcePermissions[]) => void;
+	projectPermissions: ProjectPermissionRecord[];
+	setProjectPermissions: React.Dispatch<
+		React.SetStateAction<ProjectPermissionRecord[]>
+	>;
 	isLoading: boolean;
 	isSaving: boolean;
 	hasUnsavedChanges: boolean;
@@ -76,6 +85,13 @@ export function useCreateEditRolePageActions(
 		name: '',
 		description: '',
 	});
+	const [projectPermissions, setProjectPermissions] = useState<
+		ProjectPermissionRecord[]
+	>([]);
+	const [initialProjectPermissions, setInitialProjectPermissions] = useState<
+		ProjectPermissionRecord[]
+	>([]);
+
 	const [editorMode, setEditorMode] = useQueryState(
 		'viewMode',
 		parseAsStringLiteral(EDITOR_MODES).withDefault('interactive'),
@@ -110,10 +126,14 @@ export function useCreateEditRolePageActions(
 
 	useEffect(() => {
 		if (rolePermissionsData && !isInitialized) {
+			const { cleanDescription, projectPermissions: extracted } =
+				extractProjectPermissions(rolePermissionsData.roleDescription);
 			setFormData({
 				name: rolePermissionsData.roleName,
-				description: rolePermissionsData.roleDescription,
+				description: cleanDescription,
 			});
+			setProjectPermissions(extracted);
+			setInitialProjectPermissions(extracted);
 			setLocalResources(JSON.parse(JSON.stringify(rolePermissionsData.resources)));
 			setIsInitialized(true);
 		}
@@ -147,13 +167,28 @@ export function useCreateEditRolePageActions(
 		[clearValidationErrors],
 	);
 
-	const hasUnsavedChanges = useRoleUnsavedChanges(
+	const baseHasUnsavedChanges = useRoleUnsavedChanges(
 		isCreateMode,
 		formData,
 		localResources,
-		rolePermissionsData,
+		rolePermissionsData
+			? {
+					roleName: rolePermissionsData.roleName,
+					roleDescription: extractProjectPermissions(
+						rolePermissionsData.roleDescription,
+					).cleanDescription,
+					resources: rolePermissionsData.resources,
+				}
+			: undefined,
 		emptyResources,
 	);
+
+	const hasUnsavedChanges = useMemo(() => {
+		const projectPermissionsChanged =
+			JSON.stringify(projectPermissions) !==
+			JSON.stringify(initialProjectPermissions);
+		return baseHasUnsavedChanges || projectPermissionsChanged;
+	}, [baseHasUnsavedChanges, projectPermissions, initialProjectPermissions]);
 
 	const handleSave = useCallback(async (): Promise<boolean> => {
 		if (!formData.name.trim()) {
@@ -190,17 +225,22 @@ export function useCreateEditRolePageActions(
 		clearValidationErrors();
 		setSaveError(null);
 
+		const fullDescription = serializeProjectPermissions(
+			formData.description,
+			projectPermissions,
+		);
+
 		try {
 			if (isCreateMode) {
 				await createRole({
 					name: formData.name,
-					description: formData.description,
+					description: fullDescription,
 					resources: localResources,
 				});
 			} else {
 				await updateRole({
 					roleId,
-					description: formData.description,
+					description: fullDescription,
 					resources: localResources,
 				});
 			}
@@ -221,6 +261,7 @@ export function useCreateEditRolePageActions(
 	}, [
 		formData.name,
 		formData.description,
+		projectPermissions,
 		isCreateMode,
 		roleId,
 		localResources,
@@ -250,6 +291,8 @@ export function useCreateEditRolePageActions(
 		setEditorMode: handleModeChange,
 		resources: localResources,
 		setResources: handleResourcesChange,
+		projectPermissions,
+		setProjectPermissions,
 		isLoading: isLoadingPermissions,
 		isSaving,
 		hasUnsavedChanges,

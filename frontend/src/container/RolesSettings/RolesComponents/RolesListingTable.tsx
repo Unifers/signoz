@@ -15,6 +15,7 @@ import LineClampedText from 'periscope/components/LineClampedText/LineClampedTex
 import { useTimezone } from 'providers/Timezone';
 import { RoleType } from 'types/roles';
 import { toAPIError } from 'utils/errorUtils';
+import { extractProjectPermissions } from 'container/RolesSettings/projectPermissionsHelper';
 
 import styles from './RolesListingTable.module.scss';
 
@@ -222,7 +223,11 @@ function RolesListingTable({
 			</div>
 			<div className={cx(styles.tableCell, styles.tableCellDescription)}>
 				<LineClampedText
-					text={role.description ?? '—'}
+					text={
+						role.description
+							? extractProjectPermissions(role.description).cleanDescription
+							: '—'
+					}
 					tooltipProps={{ overlayClassName: styles.descriptionTooltip }}
 				/>
 			</div>

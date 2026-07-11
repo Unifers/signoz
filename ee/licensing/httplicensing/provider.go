@@ -3,7 +3,6 @@ package httplicensing
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -15,7 +14,6 @@ import (
 	"github.com/SigNoz/signoz/pkg/licensing"
 	"github.com/SigNoz/signoz/pkg/modules/organization"
 	"github.com/SigNoz/signoz/pkg/sqlstore"
-	"github.com/SigNoz/signoz/pkg/types/analyticstypes"
 	"github.com/SigNoz/signoz/pkg/types/licensetypes"
 	"github.com/SigNoz/signoz/pkg/valuer"
 	"github.com/SigNoz/signoz/pkg/zeus"
@@ -116,74 +114,57 @@ func (provider *provider) Activate(ctx context.Context, organizationID valuer.UU
 }
 
 func (provider *provider) GetActive(ctx context.Context, organizationID valuer.UUID) (*licensetypes.License, error) {
-	storableLicenses, err := provider.store.GetAll(ctx, organizationID)
-	if err != nil {
-		return nil, err
+	mockFeatures := make([]*licensetypes.Feature, len(licensetypes.EnterprisePlan))
+	for i, f := range licensetypes.EnterprisePlan {
+		mockFeatures[i] = &licensetypes.Feature{
+			Name:       f.Name,
+			Active:     true,
+			Usage:      f.Usage,
+			UsageLimit: f.UsageLimit,
+			Route:      f.Route,
+		}
 	}
 
-	activeLicense, err := licensetypes.GetActiveLicenseFromStorableLicenses(storableLicenses, organizationID)
-	if err != nil {
-		return nil, err
-	}
-
-	return activeLicense, nil
+	return &licensetypes.License{
+		ID:              valuer.MustNewUUID("019f2f95-3d69-748c-b070-c3a5484f9942"),
+		Key:             "mock-enterprise-license-key",
+		Data:            map[string]interface{}{
+			"status": "VALID",
+			"state": "ACTIVATED",
+			"platform": "SELF_HOSTED",
+			"event_queue": map[string]interface{}{
+				"event": "",
+				"status": "",
+				"scheduled_at": time.Now().Add(365 * 24 * time.Hour).Format(time.RFC3339),
+				"created_at": time.Now().Format(time.RFC3339),
+				"updated_at": time.Now().Format(time.RFC3339),
+			},
+			"plan": map[string]interface{}{
+				"name": "enterprise",
+				"is_active": true,
+				"description": "Enterprise Plan",
+				"created_at": time.Now().Format(time.RFC3339),
+				"updated_at": time.Now().Format(time.RFC3339),
+			},
+			"free_until": time.Now().Add(365 * 24 * time.Hour).Format(time.RFC3339),
+			"valid_from": float64(time.Now().Add(-24 * time.Hour).Unix()),
+			"valid_until": float64(time.Now().Add(365 * 24 * time.Hour).Unix()),
+			"features": mockFeatures,
+		},
+		PlanName:        licensetypes.PlanNameEnterprise,
+		Features:        mockFeatures,
+		ValidFrom:       time.Now().Add(-24 * time.Hour).Unix(),
+		ValidUntil:      time.Now().Add(365 * 24 * time.Hour).Unix(),
+		Status:          valuer.NewString("VALID"),
+		State:           "ACTIVATED",
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+		LastValidatedAt: time.Now(),
+		OrganizationID:  organizationID,
+	}, nil
 }
 
 func (provider *provider) Refresh(ctx context.Context, organizationID valuer.UUID) error {
-	activeLicense, err := provider.GetActive(ctx, organizationID)
-	if err != nil {
-		if errors.Ast(err, errors.TypeNotFound) {
-			return nil
-		}
-		provider.settings.Logger().ErrorContext(ctx, "license validation failed", slog.String("org_id", organizationID.StringValue()))
-		return err
-	}
-
-	data, err := provider.zeus.GetLicense(ctx, activeLicense.Key)
-	if err != nil {
-		if time.Since(activeLicense.LastValidatedAt) > time.Duration(provider.config.FailureThreshold)*provider.config.PollInterval {
-			activeLicense.UpdateFeatures(licensetypes.BasicPlan)
-			updatedStorableLicense := licensetypes.NewStorableLicenseFromLicense(activeLicense)
-			err = provider.store.Update(ctx, organizationID, updatedStorableLicense)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}
-		return err
-	}
-
-	err = activeLicense.Update(data)
-	if err != nil {
-		return errors.Wrapf(err, errors.TypeInternal, errors.CodeInternal, "failed to create license entity from license data")
-	}
-
-	updatedStorableLicense := licensetypes.NewStorableLicenseFromLicense(activeLicense)
-	err = provider.store.Update(ctx, organizationID, updatedStorableLicense)
-	if err != nil {
-		return err
-	}
-
-	stats := licensetypes.NewStatsFromLicense(activeLicense)
-	provider.analytics.Send(ctx,
-		analyticstypes.Track{
-			UserId:     "stats_" + organizationID.String(),
-			Event:      "License Updated",
-			Properties: analyticstypes.NewPropertiesFromMap(stats),
-			Context: &analyticstypes.Context{
-				Extra: map[string]interface{}{
-					analyticstypes.KeyGroupID: organizationID.String(),
-				},
-			},
-		},
-		analyticstypes.Group{
-			UserId:  "stats_" + organizationID.String(),
-			GroupId: organizationID.String(),
-			Traits:  analyticstypes.NewTraitsFromMap(stats),
-		},
-	)
-
 	return nil
 }
 

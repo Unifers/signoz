@@ -45,6 +45,8 @@ type provider struct {
 	router                     *mux.Router
 	authzMiddleware            *middleware.AuthZ
 	authzService               authz.AuthZ
+	rulerService               ruler.Ruler
+	userGetter                 user.Getter
 	orgHandler                 organization.Handler
 	userHandler                user.Handler
 	sessionHandler             session.Handler
@@ -79,6 +81,8 @@ type provider struct {
 func NewFactory(
 	orgGetter organization.Getter,
 	authzService authz.AuthZ,
+	rulerService ruler.Ruler,
+	userGetter user.Getter,
 	orgHandler organization.Handler,
 	userHandler user.Handler,
 	sessionHandler session.Handler,
@@ -116,6 +120,8 @@ func NewFactory(
 			config,
 			orgGetter,
 			authzService,
+			rulerService,
+			userGetter,
 			orgHandler,
 			userHandler,
 			sessionHandler,
@@ -155,6 +161,8 @@ func newProvider(
 	config apiserver.Config,
 	orgGetter organization.Getter,
 	authzService authz.AuthZ,
+	rulerService ruler.Ruler,
+	userGetter user.Getter,
 	orgHandler organization.Handler,
 	userHandler user.Handler,
 	sessionHandler session.Handler,
@@ -195,6 +203,8 @@ func newProvider(
 		orgHandler:                 orgHandler,
 		userHandler:                userHandler,
 		authzService:               authzService,
+		rulerService:               rulerService,
+		userGetter:                 userGetter,
 		sessionHandler:             sessionHandler,
 		authDomainHandler:          authDomainHandler,
 		preferenceHandler:          preferenceHandler,

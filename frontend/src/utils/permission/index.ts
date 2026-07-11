@@ -29,7 +29,7 @@ export const componentPermission: Record<ComponentTypes, ROLES[]> = {
 	create_new_dashboards: ['ADMIN', 'EDITOR'],
 	import_dashboard: ['ADMIN', 'EDITOR'],
 	export_dashboard: ['ADMIN', 'EDITOR', 'VIEWER'],
-	add_new_alert: ['ADMIN', 'EDITOR'],
+	add_new_alert: ['ADMIN', 'EDITOR', 'VIEWER'],
 	add_new_channel: ['ADMIN'],
 	set_retention_period: ['ADMIN'],
 	action: ['ADMIN', 'EDITOR'],
@@ -48,7 +48,7 @@ export const componentPermission: Record<ComponentTypes, ROLES[]> = {
 
 export const routePermission: Record<keyof typeof ROUTES, ROLES[]> = {
 	HOME: ['ADMIN', 'EDITOR', 'VIEWER'],
-	ALERTS_NEW: ['ADMIN', 'EDITOR'],
+	ALERTS_NEW: ['ADMIN', 'EDITOR', 'VIEWER'],
 	ORG_SETTINGS: ['ADMIN'],
 	MY_SETTINGS: ['ADMIN', 'EDITOR', 'VIEWER', 'ANONYMOUS'],
 	SERVICE_MAP: ['ADMIN', 'EDITOR', 'VIEWER'],
@@ -64,7 +64,7 @@ export const routePermission: Record<keyof typeof ROUTES, ROLES[]> = {
 	DASHBOARD: ['ADMIN', 'EDITOR', 'VIEWER'],
 	DASHBOARD_WIDGET: ['ADMIN', 'EDITOR', 'VIEWER'],
 	DASHBOARD_PANEL_EDITOR: ['ADMIN', 'EDITOR', 'VIEWER'],
-	EDIT_ALERTS: ['ADMIN', 'EDITOR'],
+	EDIT_ALERTS: ['ADMIN', 'EDITOR', 'VIEWER'],
 	ERROR_DETAIL: ['ADMIN', 'EDITOR', 'VIEWER'],
 	HOME_PAGE: ['ADMIN', 'EDITOR', 'VIEWER'],
 	LIST_ALL_ALERT: ['ADMIN', 'EDITOR', 'VIEWER'],

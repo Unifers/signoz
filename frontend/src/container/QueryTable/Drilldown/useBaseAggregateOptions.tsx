@@ -125,7 +125,6 @@ const useBaseAggregateOptions = ({
 
 	const baseAggregateOptionsConfig = useMemo(() => {
 		if (!aggregateData) {
-			console.warn('aggregateData is null in baseAggregateOptionsConfig');
 			return {};
 		}
 

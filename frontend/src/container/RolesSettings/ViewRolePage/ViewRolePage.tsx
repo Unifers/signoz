@@ -19,6 +19,7 @@ import { useTimezone } from 'providers/Timezone';
 import APIError from 'types/api/error';
 import { RoleType } from 'types/roles';
 import { toAPIError } from 'utils/errorUtils';
+import { extractProjectPermissions } from 'container/RolesSettings/projectPermissionsHelper';
 
 import DeleteRoleModal from '../DeleteRoleModal/DeleteRoleModal';
 import PermissionOverview from './components/PermissionOverview';
@@ -28,7 +29,8 @@ import { useViewRolePageActions } from './useViewRolePageActions';
 import styles from './ViewRolePage.module.scss';
 
 function ViewRolePage(): JSX.Element {
-	const { formatTimezoneAdjustedTimestampOptional } = useTimezone();
+	const formatTimezoneAdjustedTimestampOptional =
+		useTimezone().formatTimezoneAdjustedTimestampOptional;
 	const { isRolesEnabled, isLoading: isFeatureGateLoading } =
 		useRolesFeatureGate();
 
@@ -294,8 +296,42 @@ function ViewRolePage(): JSX.Element {
 						<label htmlFor="role-description" className={styles.formLabel}>
 							Description
 						</label>
-						<Typography>{role.description}</Typography>
+						<Typography>
+							{role.description
+								? extractProjectPermissions(role.description).cleanDescription
+								: '—'}
+						</Typography>
 					</div>
+
+					{role.description &&
+						extractProjectPermissions(role.description).projectPermissions.length >
+							0 && (
+							<div className={styles.projectSection}>
+								<span className={styles.formLabel}>Service-Scoped Access Controls</span>
+								<div className={styles.projectGrid}>
+									{extractProjectPermissions(role.description).projectPermissions.map(
+										(perm, idx) => (
+											<div key={idx} className={styles.projectBadge}>
+												<strong style={{ color: '#ffad33' }}>{perm.project}</strong>: APM (
+												<code>{perm.apm}</code>), Traces (<code>{perm.traces}</code>), Logs
+												(<code>{perm.logs}</code>
+												{perm.logs === 'read' && perm.logScope && (
+													<span style={{ marginLeft: '8px', color: '#9ca3af' }}>
+														- Scope:{' '}
+														{perm.logScope.type === 'all'
+															? 'All Log Types'
+															: `Specific (${perm.logScope.value})`}
+													</span>
+												)}
+												), Alerts (<code>{perm.alerts || 'none'}</code>), External APIs (
+												<code>{perm.externalApi || 'none'}</code>)
+											</div>
+										),
+									)}
+								</div>
+							</div>
+						)}
+
 					<div className={styles.formRow}>
 						<div className={styles.formField}>
 							<label htmlFor="role-created-at" className={styles.formLabel}>

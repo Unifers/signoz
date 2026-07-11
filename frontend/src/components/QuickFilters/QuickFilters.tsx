@@ -294,24 +294,35 @@ export default function QuickFilters(props: IQuickFiltersProps): JSX.Element {
 				</div>
 			)}
 			<section className="filters">
-				{filterConfig.map((filter) => {
+				{filterConfig.map((filter, index) => {
+					const filterKey = filter.attributeKey
+						? `${filter.attributeKey.key}-${filter.attributeKey.type}-${filter.attributeKey.dataType}-${index}`
+						: `${filter.title}-${index}`;
 					switch (filter.type) {
 						case FiltersType.CHECKBOX:
 							return (
 								<Checkbox
+									key={filterKey}
 									source={source}
 									filter={filter}
 									onFilterChange={onFilterChange}
 								/>
 							);
 						case FiltersType.DURATION:
-							return <Duration filter={filter} onFilterChange={onFilterChange} />;
+							return (
+								<Duration
+									key={filterKey}
+									filter={filter}
+									onFilterChange={onFilterChange}
+								/>
+							);
 						case FiltersType.SLIDER:
-							return <Slider />;
+							return <Slider key={filterKey} />;
 						// eslint-disable-next-line sonarjs/no-duplicated-branches
 						default:
 							return (
 								<Checkbox
+									key={filterKey}
 									source={source}
 									filter={filter}
 									onFilterChange={onFilterChange}

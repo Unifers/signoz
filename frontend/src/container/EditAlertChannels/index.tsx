@@ -7,12 +7,14 @@ import editOpsgenie from 'api/channels/editOpsgenie';
 import editPagerApi from 'api/channels/editPager';
 import editSlackApi from 'api/channels/editSlack';
 import editWebhookApi from 'api/channels/editWebhook';
+import editDiscordApi from 'api/channels/editDiscord';
 import testEmail from 'api/channels/testEmail';
 import testMsTeamsApi from 'api/channels/testMsTeams';
 import testOpsgenie from 'api/channels/testOpsgenie';
 import testPagerApi from 'api/channels/testPager';
 import testSlackApi from 'api/channels/testSlack';
 import testWebhookApi from 'api/channels/testWebhook';
+import testDiscordApi from 'api/channels/testDiscord';
 import logEvent from 'api/common/logEvent';
 import ROUTES from 'constants/routes';
 import {
@@ -24,6 +26,7 @@ import {
 	SlackChannel,
 	ValidatePagerChannel,
 	WebhookChannel,
+	DiscordChannel,
 } from 'container/CreateAlertChannels/config';
 import FormAlertChannels from 'container/FormAlertChannels';
 import { useNotifications } from 'hooks/useNotifications';
@@ -45,7 +48,8 @@ function EditAlertChannels({
 				PagerChannel &
 				MsTeamsChannel &
 				OpsgenieChannel &
-				EmailChannel
+				EmailChannel &
+				DiscordChannel
 		>
 	>({
 		...initialValue,
@@ -116,6 +120,54 @@ function EditAlertChannels({
 			setSavingState(false);
 		}
 	}, [prepareSlackRequest, t, notifications, selectedConfig]);
+
+	const prepareDiscordRequest = useCallback(
+		() => ({
+			webhook_url: selectedConfig?.webhook_url || '',
+			name: selectedConfig?.name || '',
+			send_resolved: selectedConfig?.send_resolved || false,
+			title: selectedConfig?.title || '',
+			message: selectedConfig?.message || '',
+			id,
+		}),
+		[id, selectedConfig],
+	);
+
+	const onDiscordEditHandler = useCallback(async () => {
+		setSavingState(true);
+
+		if (selectedConfig?.webhook_url === '') {
+			notifications.error({
+				message: 'Error',
+				description: t('webhook_url_required'),
+			});
+			setSavingState(false);
+			return { status: 'failed', statusMessage: t('webhook_url_required') };
+		}
+
+		try {
+			await editDiscordApi(prepareDiscordRequest());
+			notifications.success({
+				message: 'Success',
+				description: t('channel_edit_done'),
+			});
+
+			history.replace(ROUTES.ALL_CHANNELS);
+			return { status: 'success', statusMessage: t('channel_edit_done') };
+		} catch (error) {
+			notifications.error({
+				message: (error as APIError).getErrorCode(),
+				description: (error as APIError).getErrorMessage(),
+			});
+			return {
+				status: 'failed',
+				statusMessage:
+					(error as APIError).getErrorMessage() || t('channel_edit_failed'),
+			};
+		} finally {
+			setSavingState(false);
+		}
+	}, [prepareDiscordRequest, t, notifications, selectedConfig]);
 
 	const prepareWebhookRequest = useCallback(() => {
 		const { name, username, password } = selectedConfig;
@@ -379,6 +431,8 @@ function EditAlertChannels({
 				result = await onOpsgenieEditHandler();
 			} else if (value === ChannelType.Email) {
 				result = await onEmailEditHandler();
+			} else if (value === ChannelType.Discord) {
+				result = await onDiscordEditHandler();
 			}
 			logEvent('Alert Channel: Save channel', {
 				type: value,
@@ -397,6 +451,7 @@ function EditAlertChannels({
 			onMsTeamsEditHandler,
 			onOpsgenieEditHandler,
 			onEmailEditHandler,
+			onDiscordEditHandler,
 		],
 	);
 
@@ -437,6 +492,10 @@ function EditAlertChannels({
 						if (request) {
 							await testEmail(request);
 						}
+						break;
+					case ChannelType.Discord:
+						request = prepareDiscordRequest();
+						await testDiscordApi(request);
 						break;
 					default:
 						notifications.error({
@@ -482,6 +541,7 @@ function EditAlertChannels({
 			prepareMsTeamsRequest,
 			prepareOpsgenieRequest,
 			prepareEmailRequest,
+			prepareDiscordRequest,
 			notifications,
 		],
 	);

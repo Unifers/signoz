@@ -81,6 +81,8 @@ function ResizeTable({
 
 	const tableParams = useMemo(() => {
 		const props = {
+			rowKey: (record: any, index?: number): string =>
+				record?.key || record?.id || String(index),
 			...restProps,
 			components: { header: { cell: ResizableHeader } },
 			columns: mergedColumns,

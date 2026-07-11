@@ -7,12 +7,14 @@ import createOpsgenie from 'api/channels/createOpsgenie';
 import createPagerApi from 'api/channels/createPager';
 import createSlackApi from 'api/channels/createSlack';
 import createWebhookApi from 'api/channels/createWebhook';
+import createDiscordApi from 'api/channels/createDiscord';
 import testEmail from 'api/channels/testEmail';
 import testMsTeamsApi from 'api/channels/testMsTeams';
 import testOpsGenie from 'api/channels/testOpsgenie';
 import testPagerApi from 'api/channels/testPager';
 import testSlackApi from 'api/channels/testSlack';
 import testWebhookApi from 'api/channels/testWebhook';
+import testDiscordApi from 'api/channels/testDiscord';
 import logEvent from 'api/common/logEvent';
 import ROUTES from 'constants/routes';
 import FormAlertChannels from 'container/FormAlertChannels';
@@ -30,6 +32,7 @@ import {
 	SlackChannel,
 	ValidatePagerChannel,
 	WebhookChannel,
+	DiscordChannel,
 } from './config';
 import {
 	EmailInitialConfig,
@@ -60,7 +63,8 @@ function CreateAlertChannels({
 				PagerChannel &
 				MsTeamsChannel &
 				OpsgenieChannel &
-				EmailChannel
+				EmailChannel &
+				DiscordChannel
 		>
 	>({
 		send_resolved: true,
@@ -163,6 +167,44 @@ function CreateAlertChannels({
 			setSavingState(false);
 		}
 	}, [selectedConfig, notifications, t, prepareSlackRequest, showErrorModal]);
+
+	const prepareDiscordRequest = useCallback(
+		() => ({
+			webhook_url: selectedConfig?.webhook_url || '',
+			name: selectedConfig?.name || '',
+			send_resolved: selectedConfig?.send_resolved || false,
+			title: selectedConfig?.title || '',
+			message: selectedConfig?.message || '',
+		}),
+		[selectedConfig],
+	);
+
+	const onDiscordHandler = useCallback(async () => {
+		if (!selectedConfig.webhook_url) {
+			notifications.error({
+				message: 'Error',
+				description: t('webhook_url_required'),
+			});
+			return;
+		}
+
+		setSavingState(true);
+
+		try {
+			await createDiscordApi(prepareDiscordRequest());
+			notifications.success({
+				message: 'Success',
+				description: t('channel_creation_done'),
+			});
+			history.replace(ROUTES.ALL_CHANNELS);
+			return { status: 'success', statusMessage: t('channel_creation_done') };
+		} catch (error) {
+			showErrorModal(error as APIError);
+			return { status: 'failed', statusMessage: t('channel_creation_failed') };
+		} finally {
+			setSavingState(false);
+		}
+	}, [selectedConfig, notifications, t, prepareDiscordRequest, showErrorModal]);
 
 	const prepareWebhookRequest = useCallback(() => {
 		// initial api request without auth params
@@ -424,6 +466,7 @@ function CreateAlertChannels({
 				[ChannelType.Opsgenie]: onOpsgenieHandler,
 				[ChannelType.MsTeams]: onMsTeamsHandler,
 				[ChannelType.Email]: onEmailHandler,
+				[ChannelType.Discord]: onDiscordHandler,
 			};
 
 			if (isChannelType(value)) {
@@ -455,6 +498,7 @@ function CreateAlertChannels({
 			onOpsgenieHandler,
 			onMsTeamsHandler,
 			onEmailHandler,
+			onDiscordHandler,
 			notifications,
 			t,
 		],
@@ -492,6 +536,10 @@ function CreateAlertChannels({
 						request = prepareEmailRequest();
 						await testEmail(request);
 						break;
+					case ChannelType.Discord:
+						request = prepareDiscordRequest();
+						await testDiscordApi(request);
+						break;
 					default:
 						notifications.error({
 							message: 'Error',
@@ -528,13 +576,15 @@ function CreateAlertChannels({
 		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[
-			prepareWebhookRequest,
 			t,
+			prepareWebhookRequest,
 			preparePagerRequest,
-			prepareOpsgenieRequest,
 			prepareSlackRequest,
 			prepareMsTeamsRequest,
+			prepareOpsgenieRequest,
 			prepareEmailRequest,
+			prepareDiscordRequest,
+			showErrorModal,
 			notifications,
 		],
 	);

@@ -111,7 +111,7 @@ func NewHandlers(
 		QuickFilter:             implquickfilter.NewHandler(modules.QuickFilter),
 		TraceFunnel:             impltracefunnel.NewHandler(modules.TraceFunnel),
 		RawDataExport:           implrawdataexport.NewHandler(modules.RawDataExport),
-		Services:                implservices.NewHandler(modules.Services),
+		Services:                implservices.NewHandler(modules.Services, modules.UserGetter),
 		MetricsExplorer:         implmetricsexplorer.NewHandler(modules.MetricsExplorer),
 		MetricReductionRule:     implmetricreductionrule.NewHandler(modules.MetricReductionRule),
 		InfraMonitoring:         implinframonitoring.NewHandler(modules.InfraMonitoring),
@@ -130,7 +130,7 @@ func NewHandlers(
 		SpanMapperHandler:       implspanmapper.NewHandler(modules.SpanMapper),
 		AlertmanagerHandler:     signozalertmanager.NewHandler(alertmanagerService),
 		TraceDetail:             impltracedetail.NewHandler(modules.TraceDetail),
-		RulerHandler:            signozruler.NewHandler(rulerService),
+		RulerHandler:            signozruler.NewHandler(rulerService, modules.UserGetter),
 		LLMPricingRuleHandler:   impllmpricingrule.NewHandler(modules.LLMPricingRule),
 		StatsHandler:            statsreporter.NewHandler(statsAggregator),
 	}

@@ -37,6 +37,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/serviceaccount/implserviceaccount"
 	"github.com/SigNoz/signoz/pkg/modules/tag"
 	"github.com/SigNoz/signoz/pkg/modules/tag/impltag"
+	"github.com/SigNoz/signoz/pkg/modules/user"
 	"github.com/SigNoz/signoz/pkg/modules/user/impluser"
 	"github.com/SigNoz/signoz/pkg/prometheus"
 	"github.com/SigNoz/signoz/pkg/querier"
@@ -114,7 +115,7 @@ func New(
 	gatewayProviderFactory func(licensing.Licensing) factory.ProviderFactory[gateway.Gateway, gateway.Config],
 	auditorProviderFactories func(licensing.Licensing) factory.NamedMap[factory.ProviderFactory[auditor.Auditor, auditor.Config]],
 	meterReporterProviderFactories func(context.Context, factory.ProviderSettings, flagger.Flagger, licensing.Licensing, telemetrystore.TelemetryStore, retention.Getter, organization.Getter, zeus.Zeus) (factory.NamedMap[factory.ProviderFactory[meterreporter.Reporter, meterreporter.Config]], string),
-	querierHandlerCallback func(factory.ProviderSettings, querier.Querier, analytics.Analytics) querier.Handler,
+	querierHandlerCallback func(factory.ProviderSettings, querier.Querier, analytics.Analytics, user.Getter) querier.Handler,
 	cloudIntegrationCallback func(sqlstore.SQLStore, dashboard.Module, global.Global, zeus.Zeus, gateway.Gateway, licensing.Licensing, serviceaccount.Module, cloudintegration.Config) (cloudintegration.Module, error),
 	metricReductionRuleModuleCallback func(sqlstore.SQLStore, telemetrystore.TelemetryStore, dashboard.Module, queryparser.QueryParser, licensing.Licensing, flagger.Flagger, telemetrytypes.MetadataStore, factory.ProviderSettings, int) metricreductionrule.Module,
 	rulerProviderFactories func(cache.Cache, alertmanager.Alertmanager, sqlstore.SQLStore, telemetrystore.TelemetryStore, telemetrytypes.MetadataStore, prometheus.Prometheus, organization.Getter, rulestatehistory.Module, querier.Querier, queryparser.QueryParser) factory.NamedMap[factory.ProviderFactory[ruler.Ruler, ruler.Config]],
@@ -491,7 +492,7 @@ func New(
 	userService := impluser.NewService(providerSettings, impluser.NewStore(sqlstore, providerSettings), modules.UserGetter, modules.UserSetter, orgGetter, authz, config.User.Root)
 
 	// Initialize the querier handler via callback (allows EE to decorate with anomaly detection)
-	querierHandler := querierHandlerCallback(providerSettings, querier, analytics)
+	querierHandler := querierHandlerCallback(providerSettings, querier, analytics, modules.UserGetter)
 
 	// Create a list of all stats collectors
 	statsCollectors := []statsreporter.StatsCollector{
@@ -556,7 +557,7 @@ func New(
 		ctx,
 		providerSettings,
 		config.APIServer,
-		NewAPIServerProviderFactories(orgGetter, authz, modules, handlers, config.Global),
+		NewAPIServerProviderFactories(orgGetter, authz, modules, handlers, rulerInstance, config.Global),
 		"signoz",
 	)
 	if err != nil {
