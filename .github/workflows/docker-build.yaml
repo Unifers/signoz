@@ -74,14 +74,12 @@ jobs:
       - name: Create .env for production build
         working-directory: frontend
         run: |
-          # VITE_FRONTEND_API_ENDPOINT can be overridden by a repo secret
-          # Default: empty string means same-origin (backend serves frontend)
-          cat > .env << EOF
-          CI=1
-          VITE_ENVIRONMENT=production
-          VITE_FRONTEND_API_ENDPOINT=${{ secrets.VITE_FRONTEND_API_ENDPOINT }}
-          VITE_VERSION=${{ github.ref_name }}
-          EOF
+          # Write .env without leading spaces so Vite reads all variables correctly
+          printf 'CI=1\n' > .env
+          printf 'VITE_ENVIRONMENT=production\n' >> .env
+          printf 'VITE_FRONTEND_API_ENDPOINT=%s\n' "${{ secrets.VITE_FRONTEND_API_ENDPOINT }}" >> .env
+          printf 'VITE_VERSION=%s\n' "${{ github.ref_name }}" >> .env
+          echo "=== .env contents ===" && cat .env
 
       - name: Build frontend
         working-directory: frontend
