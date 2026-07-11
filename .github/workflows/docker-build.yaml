@@ -5,13 +5,11 @@ name: docker-build
 # ─────────────────────────────────────────────
 on:
   push:
-    branches:
-      - main           # build & push on every merge to main
     tags:
-      - "v*"           # build & push on any version tag  e.g. v1.2.3
+      - "v*"           # ONLY triggers when you push a tag like v1.0.0, v2.3.1-rc.1
   pull_request:
     branches:
-      - main           # build only (no push) on PRs to main
+      - main           # build only (no push) on PRs — validates the code compiles
   workflow_dispatch:   # allow manual runs from the GitHub UI
 
 # Cancel in-flight runs for the same branch/PR
@@ -207,13 +205,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # On tag push: use the tag as-is   e.g.  v1.2.3
+            # Tag push: use the git tag exactly  e.g. v1.2.3
             type=ref,event=tag
-            # On branch push: use branch name + short SHA  e.g. main-abc1234
-            type=sha,prefix=${{ github.ref_name }}-,enable=${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
-            # Always tag with 'latest' on default branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            # PR builds get pr-<number> tag (image is NOT pushed, just for reference)
+            # Tag push: also tag as 'latest'
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            # PR builds: labelled pr-<number> (NOT pushed, just for reference)
             type=ref,event=pr
 
       # ── Build (and optionally push) ───────────
