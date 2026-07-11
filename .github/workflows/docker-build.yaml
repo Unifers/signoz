@@ -1,0 +1,248 @@
+name: docker-build
+
+# ─────────────────────────────────────────────
+# Triggers
+# ─────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main           # build & push on every merge to main
+    tags:
+      - "v*"           # build & push on any version tag  e.g. v1.2.3
+  pull_request:
+    branches:
+      - main           # build only (no push) on PRs to main
+  workflow_dispatch:   # allow manual runs from the GitHub UI
+
+# Cancel in-flight runs for the same branch/PR
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────
+# Permissions
+# ─────────────────────────────────────────────
+permissions:
+  contents: read
+  packages: write   # needed to push to ghcr.io
+
+# ─────────────────────────────────────────────
+# Global env
+# ─────────────────────────────────────────────
+env:
+  REGISTRY: ghcr.io
+  # Image name = ghcr.io/<owner>/<repo>  (automatically lower-cased)
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ═══════════════════════════════════════════
+  # JOB 1 — Build & export the React frontend
+  # ═══════════════════════════════════════════
+  js-build:
+    name: "Build Frontend"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Get pnpm store path
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Create .env for production build
+        working-directory: frontend
+        run: |
+          # VITE_FRONTEND_API_ENDPOINT can be overridden by a repo secret
+          # Default: empty string means same-origin (backend serves frontend)
+          cat > .env << EOF
+          CI=1
+          VITE_ENVIRONMENT=production
+          VITE_FRONTEND_API_ENDPOINT=${{ secrets.VITE_FRONTEND_API_ENDPOINT }}
+          VITE_VERSION=${{ github.ref_name }}
+          EOF
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      # Upload the built files as an artifact so the docker job can use them
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.sha }}
+          path: frontend/build/
+          retention-days: 1
+
+  # ═══════════════════════════════════════════
+  # JOB 2 — Build multi-arch Go binary
+  # ═══════════════════════════════════════════
+  go-build:
+    name: "Build Backend (${{ matrix.arch }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+          echo "hash=$(git rev-parse --short HEAD)"               >> $GITHUB_OUTPUT
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"             >> $GITHUB_OUTPUT
+          echo "branch=$(git rev-parse --abbrev-ref HEAD)"        >> $GITHUB_OUTPUT
+
+      - name: Build Go binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p target/linux-${{ matrix.arch }}
+          go build \
+            -C ./cmd/enterprise \
+            -tags timetzdata \
+            -ldflags "-s -w \
+              -X github.com/SigNoz/signoz/pkg/version.version=${{ steps.meta.outputs.version }} \
+              -X github.com/SigNoz/signoz/pkg/version.variant=enterprise \
+              -X github.com/SigNoz/signoz/pkg/version.hash=${{ steps.meta.outputs.hash }} \
+              -X github.com/SigNoz/signoz/pkg/version.time=${{ steps.meta.outputs.time }} \
+              -X github.com/SigNoz/signoz/pkg/version.branch=${{ steps.meta.outputs.branch }}" \
+            -o ../../target/linux-${{ matrix.arch }}/signoz \
+            ./...
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signoz-binary-linux-${{ matrix.arch }}-${{ github.sha }}
+          path: target/linux-${{ matrix.arch }}/signoz
+          retention-days: 1
+
+  # ═══════════════════════════════════════════
+  # JOB 3 — Assemble & push Docker image
+  # ═══════════════════════════════════════════
+  docker-build:
+    name: "Build & Push Docker Image"
+    runs-on: ubuntu-latest
+    needs: [js-build, go-build]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── Download build artifacts ──────────────
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-${{ github.sha }}
+          path: frontend/build/
+
+      - name: Download amd64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: signoz-binary-linux-amd64-${{ github.sha }}
+          path: target/linux-amd64/
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: signoz-binary-linux-arm64-${{ github.sha }}
+          path: target/linux-arm64/
+
+      - name: Fix binary permissions
+        run: |
+          chmod +x target/linux-amd64/signoz
+          chmod +x target/linux-arm64/signoz
+
+      # ── Docker setup ──────────────────────────
+      - name: Set up QEMU (for multi-arch builds)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        # Only login when we actually push (not on PR builds)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Compute Docker tags ───────────────────
+      - name: Extract Docker metadata (tags & labels)
+        id: docker-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # On tag push: use the tag as-is   e.g.  v1.2.3
+            type=ref,event=tag
+            # On branch push: use branch name + short SHA  e.g. main-abc1234
+            type=sha,prefix=${{ github.ref_name }}-,enable=${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
+            # Always tag with 'latest' on default branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            # PR builds get pr-<number> tag (image is NOT pushed, just for reference)
+            type=ref,event=pr
+
+      # ── Build (and optionally push) ───────────
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./cmd/enterprise/Dockerfile.ghcr
+          # Build both architectures in parallel
+          platforms: linux/amd64,linux/arm64
+          # Push only on non-PR events
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.docker-meta.outputs.tags }}
+          labels: ${{ steps.docker-meta.outputs.labels }}
+          # Use GitHub Actions layer cache
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Summary ───────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${{ env.REGISTRY }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tags** | \`${{ steps.docker-meta.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Pushed** | ${{ github.event_name != 'pull_request' && '✅ Yes' || '⛔ No (PR build)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Platforms** | \`linux/amd64\`, \`linux/arm64\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY

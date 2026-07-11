@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-arch production Dockerfile for SigNoz Enterprise
+#
+# Pre-requisites (handled by the CI workflow):
+#   target/linux-amd64/signoz   — Go binary for amd64
+#   target/linux-arm64/signoz   — Go binary for arm64
+#   frontend/build/             — React production build
+#   templates/                  — Email / alert templates
+# ─────────────────────────────────────────────────────────────────────────────
+FROM alpine:3.20.3
+LABEL maintainer="signoz"
+
+WORKDIR /root
+
+# Docker injects TARGETARCH automatically when using --platform
+ARG TARGETARCH
+
+RUN apk update && \
+    apk add --no-cache ca-certificates tzdata && \
+    rm -rf /var/cache/apk/*
+
+# Copy the architecture-specific pre-built binary
+COPY ./target/linux-${TARGETARCH}/signoz /root/signoz
+
+# Copy template files and pre-built frontend
+COPY ./templates         /root/templates
+COPY ./frontend/build/   /etc/signoz/web/
+
+RUN chmod 755 /root/signoz
+
+EXPOSE 8080
+
+ENTRYPOINT ["/root/signoz", "server"]
