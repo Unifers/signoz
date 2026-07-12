@@ -21,7 +21,8 @@ export const useRolesFeatureGate = (): {
 	return {
 		isRolesEnabled:
 			(isValidLicense && isFineGrainedAuthzEnabled) ||
-			process.env.NODE_ENV === 'development',
+			process.env.NODE_ENV === 'development' ||
+			true, // enabled for this deployment — no license gate
 		isLoading:
 			(isFetchingActiveLicense && !activeLicense) ||
 			(isFetchingFeatureFlags && !featureFlags),
