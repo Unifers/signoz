@@ -236,7 +236,7 @@ function ExternalApiPage(): JSX.Element {
 		handleRunQuery();
 	}, [queryClient, handleRunQuery]);
 
-	// Parse and Aggregate results
+	// Parse and Aggregate results - strip query params and merge rows with same path
 	const aggregatedData = useMemo(() => {
 		const results = (queryResponse.data as any)?.data?.data?.data?.results?.[0];
 		const columns = results?.columns || [];
@@ -244,8 +244,15 @@ function ExternalApiPage(): JSX.Element {
 
 		const formattedRows = formatDataForTable(rows, columns);
 
-		return formattedRows.map((row) => {
-			const activeRule = apiRules[row.domainName] || globalRule;
+		// Group rows by path-without-query-params, merging metrics for same endpoint
+		const groupedMap = new Map<string, ExternalApiRowData>();
+
+		formattedRows.forEach((row) => {
+			// Strip query params to get the canonical endpoint key
+			const cleanEndpoint = stripQueryParams(String(row.domainName || ''));
+			const activeRule =
+				apiRules[cleanEndpoint] || apiRules[row.domainName] || globalRule;
+
 			const errorRate =
 				typeof row.errorRate === 'number'
 					? row.errorRate
@@ -254,8 +261,75 @@ function ExternalApiPage(): JSX.Element {
 				typeof row.warningRate === 'number'
 					? row.warningRate
 					: Number(row.warningRate) || 0;
+			const rateVal =
+				typeof row.rate === 'number' ? row.rate : Number(row.rate) || 0;
+			const latencyVal =
+				typeof row.latency === 'number' ? row.latency : Number(row.latency) || 0;
+			const p99LatencyVal =
+				typeof row.p99Latency === 'number'
+					? row.p99Latency
+					: Number(row.p99Latency) || 0;
+			const lastUsedVal = row.lastUsed;
 
-			let status: 'success' | 'warning' | 'error' = 'success';
+			if (groupedMap.has(cleanEndpoint)) {
+				// Merge into existing entry: sum rates, average error/latency, keep latest lastUsed
+				const existing = groupedMap.get(cleanEndpoint)!;
+				const mergedRate = Number((existing.rate + rateVal).toFixed(2));
+				// Weighted average for error/warning rates based on merged rate
+				const totalRate = existing.rate + rateVal;
+				const mergedErrorRate =
+					totalRate > 0
+						? (existing.errorRate * existing.rate + errorRate * rateVal) / totalRate
+						: (existing.errorRate + errorRate) / 2;
+				const mergedWarningRate =
+					totalRate > 0
+						? (existing.warningRate * existing.rate + warningRate * rateVal) /
+							totalRate
+						: (existing.warningRate + warningRate) / 2;
+				// Keep max latency (p99 is a worst-case metric; avg latency: simple average)
+				const mergedLatency = (existing.latency + latencyVal) / 2;
+				const mergedP99 = Math.max(existing.p99Latency, p99LatencyVal);
+				// Keep the most recent lastUsed
+				const mergedLastUsed =
+					lastUsedVal && existing.lastUsed
+						? new Date(lastUsedVal) > new Date(existing.lastUsed)
+							? lastUsedVal
+							: existing.lastUsed
+						: lastUsedVal || existing.lastUsed;
+
+				groupedMap.set(cleanEndpoint, {
+					...existing,
+					rate: mergedRate,
+					errorRate: mergedErrorRate,
+					warningRate: mergedWarningRate,
+					successRate: 100 - mergedErrorRate - mergedWarningRate,
+					latency: mergedLatency,
+					p99Latency: mergedP99,
+					lastUsed: mergedLastUsed,
+					// status will be recalculated below
+				});
+			} else {
+				groupedMap.set(cleanEndpoint, {
+					key: cleanEndpoint,
+					endpoint: cleanEndpoint,
+					status: 'success', // placeholder, recalculated below
+					lastUsed: lastUsedVal,
+					rate: Number(rateVal.toFixed(2)),
+					errorRate,
+					warningRate,
+					successRate: 100 - errorRate - warningRate,
+					latency: latencyVal,
+					p99Latency: p99LatencyVal,
+					totalCount: 0,
+					_activeRule: activeRule,
+				} as any);
+			}
+		});
+
+		// Recalculate status for each merged group
+		return Array.from(groupedMap.values()).map((item) => {
+			const activeRule =
+				(item as any)._activeRule || apiRules[item.endpoint] || globalRule;
 			const successThreshold =
 				activeRule.successErrorRate !== undefined &&
 				activeRule.successErrorRate !== null
@@ -267,32 +341,27 @@ function ExternalApiPage(): JSX.Element {
 					? activeRule.warningErrorRate
 					: 10;
 
-			if (errorRate > warningThreshold) {
+			let status: 'success' | 'warning' | 'error' = 'success';
+			if (item.errorRate > warningThreshold) {
 				status = 'error';
-			} else if (errorRate > successThreshold || warningRate > successThreshold) {
+			} else if (
+				item.errorRate > successThreshold ||
+				item.warningRate > successThreshold
+			) {
 				status = 'warning';
 			}
 
-			const rateVal =
-				typeof row.rate === 'number' ? row.rate : Number(row.rate) || 0;
-			const latencyVal =
-				typeof row.latency === 'number' ? row.latency : Number(row.latency) || 0;
-			const p99LatencyVal =
-				typeof row.p99Latency === 'number'
-					? row.p99Latency
-					: Number(row.p99Latency) || 0;
-
 			return {
-				key: row.domainName,
-				endpoint: row.domainName,
+				key: item.endpoint,
+				endpoint: item.endpoint,
 				status,
-				lastUsed: row.lastUsed,
-				rate: Number(rateVal.toFixed(2)),
-				errorRate,
-				warningRate,
-				successRate: 100 - errorRate - warningRate,
-				latency: latencyVal,
-				p99Latency: p99LatencyVal,
+				lastUsed: item.lastUsed,
+				rate: Number(item.rate.toFixed(2)),
+				errorRate: item.errorRate,
+				warningRate: item.warningRate,
+				successRate: 100 - item.errorRate - item.warningRate,
+				latency: item.latency,
+				p99Latency: item.p99Latency,
 				totalCount: 0,
 			};
 		});
