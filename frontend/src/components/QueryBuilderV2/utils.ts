@@ -506,12 +506,14 @@ export const convertFiltersToExpressionWithExistingQuery = (
 	});
 
 	if (nonExistingFilterExpression.expression) {
+		const operator = filters.op || 'AND';
+		const expression = modifiedQuery.trim()
+			? `${modifiedQuery.trim()} ${operator} ${nonExistingFilterExpression.expression}`
+			: nonExistingFilterExpression.expression;
 		return {
 			filters: updatedFilters,
 			filter: {
-				expression: `${modifiedQuery.trim()} ${
-					nonExistingFilterExpression.expression
-				}`,
+				expression,
 			},
 		};
 	}

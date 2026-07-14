@@ -163,7 +163,10 @@ describe('MetricOverTime - V5 Migration Validation', () => {
 
 			// Verify domain filter is present
 			expect(queryData?.filter?.expression).toContain(
-				`http_host = '${mockDomainName}' service.name = 'user-service'`,
+				`http_host = '${mockDomainName}'`,
+			);
+			expect(queryData?.filter?.expression).toContain(
+				`service.name = 'user-service'`,
 			);
 		});
 	});

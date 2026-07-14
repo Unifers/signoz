@@ -22,14 +22,14 @@ function EndPointMetrics({
 		endPointMetricsDataQuery;
 
 	const metricsData = useMemo(() => {
-		if (isLoading || isRefetching || isError) {
+		if (isLoading || isRefetching || isError || !data) {
 			return null;
 		}
 
 		return getFormattedEndPointMetricsData(
-			data?.payload?.data?.result[0].table.rows,
+			data?.payload?.data?.result?.[0]?.table?.rows,
 		);
-	}, [data?.payload?.data?.result, isLoading, isRefetching, isError]);
+	}, [data, isLoading, isRefetching, isError]);
 
 	if (isError) {
 		return <ErrorState refetch={refetch} />;
@@ -44,6 +44,9 @@ function EndPointMetrics({
 					</Typography.Text>
 					<Typography.Text color="muted" className="domain-details-metadata-label">
 						AVERAGE LATENCY
+					</Typography.Text>
+					<Typography.Text color="muted" className="domain-details-metadata-label">
+						P99 LATENCY
 					</Typography.Text>
 					<Typography.Text color="muted" className="domain-details-metadata-label">
 						ERROR %
@@ -69,8 +72,17 @@ function EndPointMetrics({
 						{isLoading || isRefetching ? (
 							<Skeleton.Button active size="small" />
 						) : (
-							<Tooltip title={metricsData?.latency}>
-								{metricsData?.latency !== '-' ? `${metricsData?.latency}ms` : '-'}
+							<Tooltip title={metricsData?.avgLatency}>
+								{metricsData?.avgLatency !== '-' ? `${metricsData?.avgLatency}ms` : '-'}
+							</Tooltip>
+						)}
+					</div>
+					<div className="domain-details-metadata-value">
+						{isLoading || isRefetching ? (
+							<Skeleton.Button active size="small" />
+						) : (
+							<Tooltip title={metricsData?.p99Latency}>
+								{metricsData?.p99Latency !== '-' ? `${metricsData?.p99Latency}ms` : '-'}
 							</Tooltip>
 						)}
 					</div>

@@ -96,7 +96,7 @@ describe('AllEndpointsWidget - V5 Migration Validation', () => {
 
 			const [queryA, queryB, queryC, queryD] = widget.query.builder.queryData;
 
-			const baseExpression = `http_host = '${mockDomainName}' AND kind_string = 'Client'`;
+			const baseExpression = `(http_host = '${mockDomainName}' OR http_url LIKE 'http://${mockDomainName}%' OR http_url LIKE 'https://${mockDomainName}%') AND kind_string = 'Client'`;
 
 			// Queries A, B, C have identical base filter
 			expect(queryA.filter?.expression).toBe(

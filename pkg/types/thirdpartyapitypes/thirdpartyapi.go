@@ -5,14 +5,24 @@ import (
 	qbtypes "github.com/SigNoz/signoz/pkg/types/querybuildertypes/querybuildertypesv5"
 )
 
+type RuleConfig struct {
+	ErrorCodes       string  `json:"errorCodes"`
+	WarningCodes     string  `json:"warningCodes"`
+	SuccessErrorRate float64 `json:"successErrorRate"`
+	WarningErrorRate float64 `json:"warningErrorRate"`
+}
+
 type ThirdPartyApiRequest struct {
-	Start    uint64               `json:"start"`
-	End      uint64               `json:"end"`
-	ShowIp   bool                 `json:"show_ip,omitempty"`
-	Domain   string               `json:"domain,omitempty"`
-	Endpoint string               `json:"endpoint,omitempty"`
-	Filter   *qbtypes.Filter      `json:"filter,omitempty"`
-	GroupBy  []qbtypes.GroupByKey `json:"groupBy,omitempty"`
+	Start      uint64               `json:"start"`
+	End        uint64               `json:"end"`
+	ShowIp     bool                 `json:"show_ip,omitempty"`
+	GroupByUrl bool                 `json:"group_by_url,omitempty"`
+	Domain     string               `json:"domain,omitempty"`
+	Endpoint   string               `json:"endpoint,omitempty"`
+	Filter     *qbtypes.Filter      `json:"filter,omitempty"`
+	GroupBy    []qbtypes.GroupByKey `json:"groupBy,omitempty"`
+	GlobalRule RuleConfig           `json:"globalRule,omitempty"`
+	ApiRules   map[string]RuleConfig `json:"apiRules,omitempty"`
 }
 
 // Validate validates the ThirdPartyApiRequest.

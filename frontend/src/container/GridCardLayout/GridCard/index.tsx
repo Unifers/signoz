@@ -61,6 +61,7 @@ function GridCardGraph({
 	customOnRowClick,
 	customTimeRangeWindowForCoRelation,
 	enableDrillDown,
+	expandedViewFooter,
 }: GridCardGraphProps): JSX.Element {
 	const dispatch = useDispatch();
 	const [errorMessage, setErrorMessage] = useState<string>();
@@ -315,6 +316,7 @@ function GridCardGraph({
 					customOnRowClick={customOnRowClick}
 					customTimeRangeWindowForCoRelation={customTimeRangeWindowForCoRelation}
 					enableDrillDown={enableDrillDown}
+					expandedViewFooter={expandedViewFooter}
 				/>
 			)}
 		</div>

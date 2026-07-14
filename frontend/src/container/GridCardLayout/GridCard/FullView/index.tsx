@@ -36,8 +36,10 @@ import { useGetQueryRange } from 'hooks/queryBuilder/useGetQueryRange';
 import { useQueryBuilder } from 'hooks/queryBuilder/useQueryBuilder';
 import { useChartMutable } from 'hooks/useChartMutable';
 import useComponentPermission from 'hooks/useComponentPermission';
+import { useLocation } from 'react-router-dom';
 import { useSafeNavigate } from 'hooks/useSafeNavigate';
 import useUrlQuery from 'hooks/useUrlQuery';
+import { getApiMonitoringParams } from 'container/ApiMonitoring/queryParams';
 import { GetQueryResultsProps } from 'lib/dashboard/getQueryResults';
 import { getDashboardVariables } from 'lib/dashboardVariables/getDashboardVariables';
 import GetMinMax from 'lib/getMinMax';
@@ -81,6 +83,8 @@ function FullView({
 		minTime,
 		maxTime,
 	} = useSelector<AppState, GlobalReducer>((state) => state.globalTime);
+	const { search } = useLocation();
+	const apiParams = useMemo(() => getApiMonitoringParams(search), [search]);
 	const urlQuery = useUrlQuery();
 
 	const fullViewRef = useRef<HTMLDivElement>(null);
@@ -167,16 +171,22 @@ function FullView({
 		});
 
 	useEffect(() => {
+		const parsedRange =
+			apiParams.modalSelectedTimeRange || apiParams.modalTimeRange;
+
 		const timeRange =
 			selectedTime.enum !== 'GLOBAL_TIME'
 				? { start: undefined, end: undefined }
-				: { start: Math.floor(minTime / 1e9), end: Math.floor(maxTime / 1e9) };
+				: parsedRange
+					? { start: parsedRange.startTime, end: parsedRange.endTime }
+					: { start: Math.floor(minTime / 1e9), end: Math.floor(maxTime / 1e9) };
+
 		setRequestData((prev) => ({
 			...prev,
 			selectedTime: selectedTime.enum,
 			...timeRange,
 		}));
-	}, [selectedTime, minTime, maxTime]);
+	}, [selectedTime, minTime, maxTime, apiParams]);
 
 	// Update requestData when panel type changes
 	useEffect(() => {

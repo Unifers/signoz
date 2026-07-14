@@ -1,3 +1,4 @@
+import { ReactNode } from 'react';
 import { Card } from 'antd';
 import { ENTITY_VERSION_V5 } from 'constants/app';
 import GridCard from 'container/GridCardLayout/GridCard';
@@ -7,10 +8,12 @@ function MetricOverTimeGraph({
 	widget,
 	timeRange,
 	onDragSelect,
+	expandedViewFooter,
 }: {
 	widget: Widgets;
 	timeRange: { startTime: number; endTime: number };
 	onDragSelect: (start: number, end: number) => void;
+	expandedViewFooter?: ReactNode;
 }): JSX.Element {
 	return (
 		<div>
@@ -24,6 +27,7 @@ function MetricOverTimeGraph({
 						customTimeRange={timeRange}
 						customTimeRangeWindowForCoRelation="5m"
 						version={ENTITY_VERSION_V5}
+						expandedViewFooter={expandedViewFooter}
 					/>
 				</div>
 			</Card>

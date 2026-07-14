@@ -54,6 +54,7 @@ describe('DomainMetrics - V5 Query Payload Tests', () => {
 										A: '150',
 										B: '125000000',
 										D: '2021-01-01T23:00:00Z',
+										E: '125000000',
 										F1: '5.5',
 									},
 								},
@@ -162,6 +163,16 @@ describe('DomainMetrics - V5 Query Payload Tests', () => {
 			// Verify exact domain filter expression structure
 			expect(queryD.filter.expression).toContain("http_host = '0.0.0.0'");
 
+			// Verify Query E - avg latency
+			const queryE = queryData.find((q: any) => q.queryName === 'E');
+			expect(queryE).toBeDefined();
+			expect(queryE.aggregateOperator).toBe('avg');
+			expect(queryE.aggregations?.[0]).toBeDefined();
+			expect((queryE.aggregations?.[0] as TraceAggregation)?.expression).toBe(
+				'avg(duration_nano)',
+			);
+			expect(queryE.filter.expression).toContain("http_host = '0.0.0.0'");
+
 			// Verify Formula F1 - error rate calculation
 			const formulas = payload.query.builder.queryFormulas;
 			expect(formulas).toBeDefined();
@@ -239,12 +250,14 @@ describe('DomainMetrics - V5 Query Payload Tests', () => {
 			// Verify all metric labels are displayed
 			expect(screen.getByText('EXTERNAL API')).toBeInTheDocument();
 			expect(screen.getByText('AVERAGE LATENCY')).toBeInTheDocument();
+			expect(screen.getByText('P99 LATENCY')).toBeInTheDocument();
 			expect(screen.getByText('ERROR %')).toBeInTheDocument();
 			expect(screen.getByText('LAST USED')).toBeInTheDocument();
 
 			// Verify metric values are displayed
 			expect(screen.getByText('150')).toBeInTheDocument();
-			expect(screen.getByText('0.125s')).toBeInTheDocument();
+			const latencyValues = screen.getAllByText('0.125s');
+			expect(latencyValues).toHaveLength(2);
 		});
 	});
 

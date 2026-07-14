@@ -725,7 +725,7 @@ describe('convertFiltersToExpression', () => {
 
 		expect(result.filters.items).toHaveLength(2); // Original + new filter
 		expect(result.filter.expression).toBe(
-			"service.name = 'old-service' new.key = 'new-value'",
+			"service.name = 'old-service' AND new.key = 'new-value'",
 		);
 	});
 

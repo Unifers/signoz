@@ -53,6 +53,16 @@ export const APIMonitoringColumnsMock: APIMonitoringResponseColumn[] = [
 		columnType: 'metric',
 	},
 	{
+		name: 'avg',
+		signal: 'traces',
+		fieldContext: '',
+		fieldDataType: 'number',
+		queryName: 'avg',
+		aggregationIndex: 0,
+		meta: {},
+		columnType: 'metric',
+	},
+	{
 		name: 'lastseen',
 		signal: 'traces',
 		fieldContext: '',

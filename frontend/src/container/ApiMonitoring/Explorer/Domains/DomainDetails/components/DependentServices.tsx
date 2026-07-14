@@ -39,11 +39,14 @@ function DependentServices({
 		setIsExpanded((prev) => !prev);
 	};
 
-	const dependentServicesData = useMemo(
-		(): DependentServicesData[] =>
-			getFormattedDependentServicesData(data?.payload?.data?.result[0].table.rows),
-		[data],
-	);
+	const dependentServicesData = useMemo((): DependentServicesData[] => {
+		if (isLoading || isRefetching || isError || !data) {
+			return [];
+		}
+		return getFormattedDependentServicesData(
+			data?.payload?.data?.result?.[0]?.table?.rows,
+		);
+	}, [data, isLoading, isRefetching, isError]);
 
 	const paginationConfig = useMemo(
 		(): TablePaginationConfig => ({

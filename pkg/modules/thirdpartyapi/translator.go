@@ -3,6 +3,7 @@ package thirdpartyapi
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/types/thirdpartyapitypes"
@@ -35,6 +36,14 @@ var (
 			Signal:        telemetrytypes.SignalTraces,
 		},
 	}
+	groupByKeyHTTPStatusCode = qbtypes.GroupByKey{
+		TelemetryFieldKey: telemetrytypes.TelemetryFieldKey{
+			Name:          "response_status_code",
+			FieldDataType: telemetrytypes.FieldDataTypeString,
+			FieldContext:  telemetrytypes.FieldContextSpan,
+			Signal:        telemetrytypes.SignalTraces,
+		},
+	}
 )
 
 func FilterIntermediateColumns(result *qbtypes.QueryRangeResponse) *qbtypes.QueryRangeResponse {
@@ -51,8 +60,9 @@ func FilterIntermediateColumns(result *qbtypes.QueryRangeResponse) *qbtypes.Quer
 		// Filter out columns for intermediate queries used only in formulas
 		filteredColumns := make([]*qbtypes.ColumnDescriptor, 0)
 		intermediateQueryNames := map[string]bool{
-			"error":      true,
-			"total_span": true,
+			"error_span":   true,
+			"warning_span": true,
+			"total_span":   true,
 		}
 
 		columnIndices := make([]int, 0)
@@ -193,8 +203,19 @@ func shouldIncludeRow(row *qbtypes.RawRow) bool {
 	return true
 }
 
+func getGroupByField(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.GroupByKey {
+	if req.GroupByUrl {
+		return groupByKeyHTTPURL
+	}
+	return groupByKeyHTTPHost
+}
+
 func mergeGroupBy(base qbtypes.GroupByKey, additional []qbtypes.GroupByKey) []qbtypes.GroupByKey {
 	return append([]qbtypes.GroupByKey{base}, additional...)
+}
+
+func mergeGroupByWithStatus(base qbtypes.GroupByKey, additional []qbtypes.GroupByKey) []qbtypes.GroupByKey {
+	return append([]qbtypes.GroupByKey{base, groupByKeyHTTPStatusCode}, additional...)
 }
 
 func BuildDomainList(req *thirdpartyapitypes.ThirdPartyApiRequest) (*qbtypes.QueryRangeRequest, error) {
@@ -206,10 +227,13 @@ func BuildDomainList(req *thirdpartyapitypes.ThirdPartyApiRequest) (*qbtypes.Que
 		buildEndpointsQuery(req),
 		buildLastSeenQuery(req),
 		buildRpsQuery(req),
-		buildErrorQuery(req),
 		buildTotalSpanQuery(req),
+		buildErrorSpanQuery(req),
+		buildWarningSpanQuery(req),
 		buildP99Query(req),
+		buildAvgQuery(req),
 		buildErrorRateFormula(),
+		buildWarningRateFormula(),
 	}
 
 	return &qbtypes.QueryRangeRequest{
@@ -234,6 +258,7 @@ func BuildDomainInfo(req *thirdpartyapitypes.ThirdPartyApiRequest) (*qbtypes.Que
 	queries := []qbtypes.QueryEnvelope{
 		buildEndpointsInfoQuery(req),
 		buildP99InfoQuery(req),
+		buildAvgInfoQuery(req),
 		buildErrorRateInfoQuery(req),
 		buildLastSeenInfoQuery(req),
 	}
@@ -263,7 +288,7 @@ func buildEndpointsQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.Q
 				{Expression: fmt.Sprintf("count_distinct(%s)", derivedKeyHTTPURL)},
 			},
 			Filter:  buildBaseFilter(req.Filter),
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
@@ -279,7 +304,7 @@ func buildLastSeenQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.Qu
 				{Expression: "max(timestamp)"},
 			},
 			Filter:  buildBaseFilter(req.Filter),
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
@@ -295,25 +320,57 @@ func buildRpsQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEn
 				{Expression: "rate()"},
 			},
 			Filter:  buildBaseFilter(req.Filter),
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
 
-func buildErrorQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+func buildErrorSpanQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+	hostField := derivedKeyHTTPHost
+	if req.GroupByUrl {
+		hostField = derivedKeyHTTPURL
+	}
+	expr := buildRulesFilter(hostField, req.GlobalRule.ErrorCodes, req.ApiRules, true)
+
 	filter := buildBaseFilter(req.Filter)
-	filter.Expression = fmt.Sprintf("has_error = true AND (%s)", filter.Expression)
+	filter.Expression = fmt.Sprintf("%s AND (%s)", expr, filter.Expression)
+
 	return qbtypes.QueryEnvelope{
 		Type: qbtypes.QueryTypeBuilder,
 		Spec: qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]{
-			Name:         "error",
+			Name:         "error_span",
 			Signal:       telemetrytypes.SignalTraces,
 			StepInterval: qbtypes.Step{Duration: defaultStepInterval},
 			Aggregations: []qbtypes.TraceAggregation{
 				{Expression: "count()"},
 			},
 			Filter:  filter,
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
+		},
+	}
+}
+
+func buildWarningSpanQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+	hostField := derivedKeyHTTPHost
+	if req.GroupByUrl {
+		hostField = derivedKeyHTTPURL
+	}
+	expr := buildRulesFilter(hostField, req.GlobalRule.WarningCodes, req.ApiRules, false)
+
+	filter := buildBaseFilter(req.Filter)
+	filter.Expression = fmt.Sprintf("%s AND (%s)", expr, filter.Expression)
+
+	return qbtypes.QueryEnvelope{
+		Type: qbtypes.QueryTypeBuilder,
+		Spec: qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]{
+			Name:         "warning_span",
+			Signal:       telemetrytypes.SignalTraces,
+			StepInterval: qbtypes.Step{Duration: defaultStepInterval},
+			Aggregations: []qbtypes.TraceAggregation{
+				{Expression: "count()"},
+			},
+			Filter:  filter,
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
@@ -329,7 +386,7 @@ func buildTotalSpanQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.Q
 				{Expression: "count()"},
 			},
 			Filter:  buildBaseFilter(req.Filter),
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
@@ -345,7 +402,7 @@ func buildP99Query(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEn
 				{Expression: "p99(duration_nano)"},
 			},
 			Filter:  buildBaseFilter(req.Filter),
-			GroupBy: mergeGroupBy(groupByKeyHTTPHost, req.GroupBy),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
 		},
 	}
 }
@@ -355,7 +412,17 @@ func buildErrorRateFormula() qbtypes.QueryEnvelope {
 		Type: qbtypes.QueryTypeFormula,
 		Spec: qbtypes.QueryBuilderFormula{
 			Name:       "error_rate",
-			Expression: "(error/total_span)*100",
+			Expression: "(error_span/total_span)*100",
+		},
+	}
+}
+
+func buildWarningRateFormula() qbtypes.QueryEnvelope {
+	return qbtypes.QueryEnvelope{
+		Type: qbtypes.QueryTypeFormula,
+		Spec: qbtypes.QueryBuilderFormula{
+			Name:       "warning_rate",
+			Expression: "(warning_span/total_span)*100",
 		},
 	}
 }
@@ -433,4 +500,91 @@ func buildBaseFilter(additionalFilter *qbtypes.Filter) *qbtypes.Filter {
 	}
 
 	return &qbtypes.Filter{Expression: baseExpression}
+}
+
+func buildAvgQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+	return qbtypes.QueryEnvelope{
+		Type: qbtypes.QueryTypeBuilder,
+		Spec: qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]{
+			Name:         "avg",
+			Signal:       telemetrytypes.SignalTraces,
+			StepInterval: qbtypes.Step{Duration: defaultStepInterval},
+			Aggregations: []qbtypes.TraceAggregation{
+				{Expression: "avg(duration_nano)"},
+			},
+			Filter:  buildBaseFilter(req.Filter),
+			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
+		},
+	}
+}
+
+func buildAvgInfoQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+	return qbtypes.QueryEnvelope{
+		Type: qbtypes.QueryTypeBuilder,
+		Spec: qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]{
+			Name:         "avg",
+			Signal:       telemetrytypes.SignalTraces,
+			StepInterval: qbtypes.Step{Duration: defaultStepInterval},
+			Aggregations: []qbtypes.TraceAggregation{
+				{Expression: "avg(duration_nano)"},
+			},
+			Filter:  buildBaseFilter(req.Filter),
+			GroupBy: req.GroupBy,
+		},
+	}
+}
+
+func buildStatusFilter(codesStr string) string {
+	patterns := strings.Split(codesStr, ",")
+	var parts []string
+	for _, p := range patterns {
+		p = strings.TrimSpace(strings.ToLower(p))
+		if p == "" {
+			parts = append(parts, "response_status_code = '' OR response_status_code = 'n/a'")
+		} else if strings.HasSuffix(p, "xx") {
+			prefix := p[:len(p)-2]
+			parts = append(parts, fmt.Sprintf("response_status_code LIKE '%s%%'", prefix))
+		} else if strings.HasSuffix(p, "x") {
+			prefix := p[:len(p)-1]
+			parts = append(parts, fmt.Sprintf("response_status_code LIKE '%s%%'", prefix))
+		} else {
+			parts = append(parts, fmt.Sprintf("response_status_code = '%s'", p))
+		}
+	}
+	if len(parts) == 0 {
+		return "1 = 0"
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
+}
+
+func buildRulesFilter(hostField string, globalCodes string, apiRules map[string]thirdpartyapitypes.RuleConfig, isError bool) string {
+	var parts []string
+	var apiNames []string
+
+	for apiName, rule := range apiRules {
+		codes := rule.WarningCodes
+		if isError {
+			codes = rule.ErrorCodes
+		}
+		if codes == "" {
+			codes = globalCodes
+		}
+		expr := buildStatusFilter(codes)
+		parts = append(parts, fmt.Sprintf("(%s = '%s' AND %s)", hostField, apiName, expr))
+		apiNames = append(apiNames, apiName)
+	}
+
+	// Add the global fallback
+	globalExpr := buildStatusFilter(globalCodes)
+	if len(apiNames) > 0 {
+		var notInParts []string
+		for _, name := range apiNames {
+			notInParts = append(notInParts, fmt.Sprintf("'%s'", name))
+		}
+		parts = append(parts, fmt.Sprintf("(%s NOT IN (%s) AND %s)", hostField, strings.Join(notInParts, ", "), globalExpr))
+	} else {
+		parts = append(parts, globalExpr)
+	}
+
+	return "(" + strings.Join(parts, " OR ") + ")"
 }

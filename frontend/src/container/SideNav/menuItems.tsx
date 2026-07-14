@@ -166,6 +166,13 @@ const menuItems: SidebarItem[] = [
 		itemKey: 'external-apis',
 	},
 	{
+		key: ROUTES.EXTERNAL_API_BOARD,
+		label: 'External API Board',
+		icon: <Binoculars size={16} />,
+		isNew: true,
+		itemKey: 'external-api-board',
+	},
+	{
 		key: ROUTES.LIST_ALL_ALERT,
 		label: 'Alerts',
 		icon: <BellDot size={16} />,
@@ -287,6 +294,14 @@ export const defaultMoreMenuItems: SidebarItem[] = [
 		isNew: true,
 		isEnabled: true,
 		itemKey: 'external-apis',
+	},
+	{
+		key: ROUTES.EXTERNAL_API_BOARD,
+		label: 'External API Board',
+		icon: <Binoculars size={16} />,
+		isNew: true,
+		isEnabled: true,
+		itemKey: 'external-api-board',
 	},
 	{
 		key: ROUTES.METER,

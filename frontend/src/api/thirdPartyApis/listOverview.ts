@@ -8,7 +8,15 @@ const listOverview = async (
 	props: Props,
 	signal?: AbortSignal,
 ): Promise<SuccessResponseV2<PayloadProps>> => {
-	const { start, end, show_ip: showIp, filter } = props;
+	const {
+		start,
+		end,
+		show_ip: showIp,
+		filter,
+		group_by_url: groupByUrl,
+		globalRule,
+		apiRules,
+	} = props;
 	try {
 		const response = await axios.post(
 			`/third-party-apis/overview/list`,
@@ -17,6 +25,9 @@ const listOverview = async (
 				end,
 				show_ip: showIp,
 				filter,
+				group_by_url: groupByUrl,
+				globalRule,
+				apiRules,
 			},
 			{ signal },
 		);

@@ -31,11 +31,14 @@ function EndPointsDropDown({
 		setSelectedEndPointName(value);
 	};
 
-	const formattedData = useMemo(
-		() =>
-			getFormattedEndPointDropDownData(data?.payload.data.result[0].table.rows),
-		[data?.payload.data.result],
-	);
+	const formattedData = useMemo(() => {
+		if (isLoading || isFetching || !data) {
+			return [];
+		}
+		return getFormattedEndPointDropDownData(
+			data?.payload?.data?.result?.[0]?.table?.rows,
+		);
+	}, [data, isLoading, isFetching]);
 
 	return (
 		<Select

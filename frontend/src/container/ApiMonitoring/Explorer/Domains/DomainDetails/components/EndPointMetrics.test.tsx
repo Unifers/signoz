@@ -41,6 +41,7 @@ describe('EndPointMetrics - V5 Query Payload Tests', () => {
 										B: '245000000',
 										D: '2021-01-01T22:30:00Z',
 										F1: '3.2',
+										J: '245000000',
 									},
 								},
 							],
@@ -309,12 +310,14 @@ describe('EndPointMetrics - V5 Query Payload Tests', () => {
 			// Verify all metric labels are displayed
 			expect(screen.getByText('Rate')).toBeInTheDocument();
 			expect(screen.getByText('AVERAGE LATENCY')).toBeInTheDocument();
+			expect(screen.getByText('P99 LATENCY')).toBeInTheDocument();
 			expect(screen.getByText('ERROR %')).toBeInTheDocument();
 			expect(screen.getByText('LAST USED')).toBeInTheDocument();
 
 			// Verify metric values are displayed
 			expect(screen.getByText('85.5 ops/sec')).toBeInTheDocument();
-			expect(screen.getByText('245ms')).toBeInTheDocument();
+			const latencyValues = screen.getAllByText('245ms');
+			expect(latencyValues).toHaveLength(2);
 		});
 	});
 

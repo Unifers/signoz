@@ -21,14 +21,14 @@ function StatusCodeTable({
 		endPointStatusCodeDataQuery;
 
 	const statusCodeData = useMemo(() => {
-		if (isLoading || isRefetching || isError) {
+		if (isLoading || isRefetching || isError || !data) {
 			return [];
 		}
 
 		return getFormattedEndPointStatusCodeData(
-			data?.payload?.data?.result[0].table.rows,
+			data?.payload?.data?.result?.[0]?.table?.rows,
 		);
-	}, [data?.payload?.data?.result, isLoading, isRefetching, isError]);
+	}, [data, isLoading, isRefetching, isError]);
 
 	if (isError) {
 		return <ErrorState refetch={refetch} />;

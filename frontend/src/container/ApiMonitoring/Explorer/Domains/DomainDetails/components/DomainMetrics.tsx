@@ -96,6 +96,9 @@ function DomainMetrics({
 						AVERAGE LATENCY
 					</Typography.Text>
 					<Typography.Text color="muted" className="domain-details-metadata-label">
+						P99 LATENCY
+					</Typography.Text>
+					<Typography.Text color="muted" className="domain-details-metadata-label">
 						ERROR %
 					</Typography.Text>
 					<Typography.Text color="muted" className="domain-details-metadata-label">
@@ -124,6 +127,19 @@ function DomainMetrics({
 								<span className="round-metric-tag">
 									{formattedDomainMetricsData.latency !== '-'
 										? `${(Number(formattedDomainMetricsData.latency) / 1000).toFixed(3)}s`
+										: '-'}
+								</span>
+							</Tooltip>
+						)}
+					</div>
+					<div className="domain-details-metadata-value">
+						{isLoading || isRefetching ? (
+							<Skeleton.Button active size="small" />
+						) : (
+							<Tooltip title={formattedDomainMetricsData.p99Latency}>
+								<span className="round-metric-tag">
+									{formattedDomainMetricsData.p99Latency !== '-'
+										? `${(Number(formattedDomainMetricsData.p99Latency) / 1000).toFixed(3)}s`
 										: '-'}
 								</span>
 							</Tooltip>

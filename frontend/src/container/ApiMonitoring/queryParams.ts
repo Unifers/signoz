@@ -12,6 +12,8 @@ export interface ApiMonitoringParams {
 	endPointDetailsLocalFilters?: any;
 	modalTimeRange?: { startTime: number; endTime: number };
 	selectedInterval?: string;
+	modalSelectedTimeRange?: { startTime: number; endTime: number };
+	modalSelectedTimeInterval?: string;
 	// Add more params as needed
 }
 
@@ -25,6 +27,8 @@ export const DEFAULT_PARAMS: ApiMonitoringParams = {
 	endPointDetailsLocalFilters: undefined,
 	modalTimeRange: undefined,
 	selectedInterval: undefined,
+	modalSelectedTimeRange: undefined,
+	modalSelectedTimeInterval: undefined,
 };
 
 const PARAM_KEY = 'apiMonitoringParams';

@@ -3,7 +3,7 @@ import { Color } from '@signozhq/design-tokens';
 import { TableColumnType as ColumnType, Tooltip } from 'antd';
 import { Progress } from '@signozhq/ui/progress';
 import { Badge } from '@signozhq/ui/badge';
-import { convertFiltersToExpressionWithExistingQuery } from 'components/QueryBuilderV2/utils';
+import { convertFiltersToExpression } from 'components/QueryBuilderV2/utils';
 import {
 	FiltersType,
 	IQuickFiltersConfig,
@@ -56,7 +56,7 @@ export const getDisplayValue = (value: unknown): string =>
 	isEmptyFilterValue(value) ? '-' : String(value);
 
 export const getDomainNameFilterExpression = (domainName: string): string =>
-	`http_host = '${domainName}'`;
+	`(http_host = '${domainName}' OR http_url LIKE 'http://${domainName}%' OR http_url LIKE 'https://${domainName}%')`;
 
 export const clientKindExpression = `kind_string = 'Client'`;
 
@@ -70,15 +70,18 @@ export const convertFiltersWithUrlHandling = (
 	filters: IBuilderQuery['filters'],
 	baseExpression: string,
 ): string => {
-	if (!filters) {
+	if (!filters || !filters.items || filters.items.length === 0) {
 		return baseExpression;
 	}
 
-	const { filter } = convertFiltersToExpressionWithExistingQuery(
-		filters,
-		baseExpression,
-	);
-	return filter.expression;
+	const userFilterExpr = convertFiltersToExpression(filters).expression;
+	if (!userFilterExpr) {
+		return baseExpression;
+	}
+
+	return baseExpression
+		? `${baseExpression} AND ${userFilterExpr}`
+		: userFilterExpr;
 };
 
 export const ApiMonitoringQuickFiltersConfig: IQuickFiltersConfig[] = [
@@ -153,7 +156,7 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		title: <div className="domain-list-name-col-header">Domain</div>,
 		dataIndex: 'domainName',
 		key: 'domainName',
-		width: '23.7%',
+		width: '20%',
 		ellipsis: true,
 		sorter: false,
 		className: 'column column-domain-name',
@@ -166,7 +169,7 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		title: <div>Endpoints in use</div>,
 		dataIndex: 'endpointCount',
 		key: 'endpointCount',
-		width: '14.2%',
+		width: '13%',
 		ellipsis: true,
 		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
 			const endpointA =
@@ -198,7 +201,7 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		title: <div>Last used</div>,
 		dataIndex: 'lastUsed',
 		key: 'lastUsed',
-		width: '14.2%',
+		width: '13%',
 		align: 'right',
 		className: `column`,
 		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
@@ -226,7 +229,7 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		),
 		dataIndex: 'rate',
 		key: 'rate',
-		width: '14.2%',
+		width: '13%',
 		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
 			const rateA = rowA.rate === '-' || rowA.rate === 'n/a' ? 0 : rowA.rate;
 			const rateB = rowB.rate === '-' || rowB.rate === 'n/a' ? 0 : rowB.rate;
@@ -243,7 +246,7 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		),
 		dataIndex: 'errorRate',
 		key: 'errorRate',
-		width: '14.2%',
+		width: '13%',
 		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
 			const errorRateA =
 				rowA.errorRate === '-' || rowA.errorRate === 'n/a' ? 0 : rowA.errorRate;
@@ -285,12 +288,32 @@ export const columnsConfig: ColumnType<APIDomainsRowData>[] = [
 		),
 		dataIndex: 'latency',
 		key: 'latency',
-		width: '14.2%',
+		width: '14%',
 		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
 			const latencyA =
 				rowA.latency === '-' || rowA.latency === 'n/a' ? 0 : rowA.latency;
 			const latencyB =
 				rowB.latency === '-' || rowB.latency === 'n/a' ? 0 : rowB.latency;
+
+			return Number(latencyA) - Number(latencyB);
+		},
+		align: 'right',
+		className: `column`,
+	},
+	{
+		title: (
+			<div>
+				p99 Latency <span className="round-metric-tag">ms</span>
+			</div>
+		),
+		dataIndex: 'p99Latency',
+		key: 'p99Latency',
+		width: '14%',
+		sorter: (rowA: APIDomainsRowData, rowB: APIDomainsRowData): number => {
+			const latencyA =
+				rowA.p99Latency === '-' || rowA.p99Latency === 'n/a' ? 0 : rowA.p99Latency;
+			const latencyB =
+				rowB.p99Latency === '-' || rowB.p99Latency === 'n/a' ? 0 : rowB.p99Latency;
 
 			return Number(latencyA) - Number(latencyB);
 		},
@@ -305,10 +328,14 @@ export const formatDataForTable = (
 ): APIDomainsRowData[] => {
 	const indexMap = columns.reduce(
 		(acc, column, index) => {
-			if (column.name === domainNameKey) {
-				acc[column.name] = index;
+			if (
+				column.name === domainNameKey ||
+				column.name === 'http_url' ||
+				column.columnType === 'attribute'
+			) {
+				acc[domainNameKey] = index;
 			} else {
-				acc[column.queryName] = index;
+				acc[column.queryName || column.name] = index;
 			}
 			return acc;
 		},
@@ -331,7 +358,16 @@ export const formatDataForTable = (
 				row[indexMap.error_rate] === 'n/a' || row[indexMap.error_rate] === undefined
 					? 0
 					: row[indexMap.error_rate],
+			warningRate:
+				row[indexMap.warning_rate] === 'n/a' ||
+				row[indexMap.warning_rate] === undefined
+					? 0
+					: row[indexMap.warning_rate],
 			latency:
+				row[indexMap.avg] === 'n/a' || row[indexMap.avg] === undefined
+					? '-'
+					: Math.round(Number(row[indexMap.avg]) / 1000000),
+			p99Latency:
 				row[indexMap.p99] === 'n/a' || row[indexMap.p99] === undefined
 					? '-'
 					: Math.round(Number(row[indexMap.p99]) / 1000000),
@@ -343,8 +379,6 @@ export const formatDataForTable = (
 		return rowData;
 	});
 };
-
-const urlExpression = `${SPAN_ATTRIBUTES.HTTP_URL} EXISTS`;
 
 export const getDomainMetricsQueryPayload = (
 	domainName: string,
@@ -373,7 +407,7 @@ export const getDomainMetricsQueryPayload = (
 						filter: {
 							expression: convertFiltersWithUrlHandling(
 								filters || { items: [], op: 'AND' },
-								`${getDomainNameFilterExpression(domainName)} AND ${urlExpression}`,
+								`${getDomainNameFilterExpression(domainName)} AND kind_string = 'Client' AND http_url EXISTS`,
 							),
 						},
 						expression: 'A',
@@ -401,7 +435,7 @@ export const getDomainMetricsQueryPayload = (
 						filter: {
 							expression: convertFiltersWithUrlHandling(
 								filters || { items: [], op: 'AND' },
-								`${getDomainNameFilterExpression(domainName)}`,
+								`${getDomainNameFilterExpression(domainName)} AND kind_string = 'Client' AND http_url EXISTS`,
 							),
 						},
 						expression: 'B',
@@ -429,7 +463,7 @@ export const getDomainMetricsQueryPayload = (
 						filter: {
 							expression: convertFiltersWithUrlHandling(
 								filters || { items: [], op: 'AND' },
-								`${getDomainNameFilterExpression(domainName)} AND has_error = true`,
+								`${getDomainNameFilterExpression(domainName)} AND kind_string = 'Client' AND http_url EXISTS AND has_error = true`,
 							),
 						},
 						expression: 'C',
@@ -457,10 +491,38 @@ export const getDomainMetricsQueryPayload = (
 						filter: {
 							expression: convertFiltersWithUrlHandling(
 								filters || { items: [], op: 'AND' },
-								`${getDomainNameFilterExpression(domainName)}`,
+								`${getDomainNameFilterExpression(domainName)} AND kind_string = 'Client' AND http_url EXISTS`,
 							),
 						},
 						expression: 'D',
+						disabled: false,
+						stepInterval: 60,
+						having: [],
+						limit: null,
+						orderBy: [],
+						groupBy: [],
+						legend: '',
+						reduceTo: ReduceOperators.AVG,
+					},
+					{
+						dataSource: DataSource.TRACES,
+						queryName: 'E',
+						aggregateOperator: 'avg',
+						aggregations: [
+							{
+								expression: 'avg(duration_nano)',
+							},
+						],
+						timeAggregation: 'avg',
+						spaceAggregation: 'sum',
+						functions: [],
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(domainName)} AND kind_string = 'Client' AND http_url EXISTS`,
+							),
+						},
+						expression: 'E',
 						disabled: false,
 						stepInterval: 60,
 						having: [],
@@ -511,6 +573,7 @@ export const getDomainMetricsQueryPayload = (
 export interface DomainMetricsData {
 	endpointCount: number | string;
 	latency: number | string;
+	p99Latency: number | string;
 	errorRate: number | string;
 	lastUsed: number | string;
 }
@@ -520,6 +583,7 @@ export interface DomainMetricsResponseRow {
 		A: number | string;
 		B: number | string;
 		D: number | string;
+		E: number | string;
 		F1: number | string;
 	};
 }
@@ -531,6 +595,7 @@ export const formatDomainMetricsDataForTable = (
 		return {
 			endpointCount: '-',
 			latency: '-',
+			p99Latency: '-',
 			errorRate: '-',
 			lastUsed: '-',
 		};
@@ -538,7 +603,11 @@ export const formatDomainMetricsDataForTable = (
 
 	const dataMap = row.data;
 	// Convert nanoseconds to milliseconds for latency (only if valid)
-	const latencyInMs = !isEmptyFilterValue(dataMap.B)
+	const latencyInMs = !isEmptyFilterValue(dataMap.E)
+		? convertNanoToMilliseconds(Number(dataMap.E))
+		: undefined;
+
+	const p99LatencyInMs = !isEmptyFilterValue(dataMap.B)
 		? convertNanoToMilliseconds(Number(dataMap.B))
 		: undefined;
 
@@ -550,6 +619,7 @@ export const formatDomainMetricsDataForTable = (
 	return {
 		endpointCount: getDisplayValue(dataMap.A),
 		latency: getDisplayValue(latencyInMs),
+		p99Latency: getDisplayValue(p99LatencyInMs),
 		errorRate: getDisplayValue(dataMap.F1),
 		lastUsed: getDisplayValue(lastUsedFormatted),
 	};
@@ -1531,6 +1601,186 @@ export const getEndPointDetailsQueryPayload = (
 						stepInterval: 60,
 						timeAggregation: 'count',
 					},
+					{
+						aggregations: [
+							{
+								expression: 'p50(duration_nano)',
+							},
+						],
+						aggregateOperator: 'p50',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'G',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'P50',
+						limit: null,
+						orderBy: [],
+						queryName: 'G',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'p50',
+					},
+					{
+						aggregations: [
+							{
+								expression: 'p90(duration_nano)',
+							},
+						],
+						aggregateOperator: 'p90',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'H',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'P90',
+						limit: null,
+						orderBy: [],
+						queryName: 'H',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'p90',
+					},
+					{
+						aggregations: [
+							{
+								expression: 'p95(duration_nano)',
+							},
+						],
+						aggregateOperator: 'p95',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'I',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'P95',
+						limit: null,
+						orderBy: [],
+						queryName: 'I',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'p95',
+					},
+					{
+						aggregations: [
+							{
+								expression: 'avg(duration_nano)',
+							},
+						],
+						aggregateOperator: 'avg',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'J',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'Avg',
+						limit: null,
+						orderBy: [],
+						queryName: 'J',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'avg',
+					},
+					{
+						aggregations: [
+							{
+								expression: 'max(duration_nano)',
+							},
+						],
+						aggregateOperator: 'max',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'K',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'Max',
+						limit: null,
+						orderBy: [],
+						queryName: 'K',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'max',
+					},
+					{
+						aggregations: [
+							{
+								expression: 'min(duration_nano)',
+							},
+						],
+						aggregateOperator: 'min',
+						dataSource: DataSource.TRACES,
+						disabled: false,
+						expression: 'L',
+						filter: {
+							expression: convertFiltersWithUrlHandling(
+								filters || { items: [], op: 'AND' },
+								`${getDomainNameFilterExpression(
+									domainName,
+								)} AND ${clientKindExpression}`,
+							),
+						},
+						functions: [],
+						groupBy: [],
+						having: [],
+						legend: 'Min',
+						limit: null,
+						orderBy: [],
+						queryName: 'L',
+						reduceTo: ReduceOperators.AVG,
+						spaceAggregation: 'sum',
+						stepInterval: 60,
+						timeAggregation: 'min',
+					},
 				],
 				queryFormulas: [
 					{
@@ -2218,6 +2468,12 @@ interface EndPointMetricsResponseRow {
 		C: number | string;
 		D: number | string;
 		F1: number | string;
+		G?: number | string;
+		H?: number | string;
+		I?: number | string;
+		J?: number | string;
+		K?: number | string;
+		L?: number | string;
 	};
 }
 
@@ -2236,6 +2492,13 @@ interface EndPointMetricsData {
 	latency: number | string;
 	errorRate: number | string;
 	lastUsed: string;
+	p50Latency?: number | string;
+	p90Latency?: number | string;
+	p95Latency?: number | string;
+	p99Latency?: number | string;
+	avgLatency?: number | string;
+	maxLatency?: number | string;
+	minLatency?: number | string;
 }
 
 interface EndPointStatusCodeData {
@@ -2266,6 +2529,30 @@ export const getFormattedEndPointMetricsData = (
 		? convertNanoToMilliseconds(Number(dataMap.B))
 		: undefined;
 
+	const latencyP50 = !isEmptyFilterValue(dataMap.G)
+		? convertNanoToMilliseconds(Number(dataMap.G))
+		: undefined;
+
+	const latencyP90 = !isEmptyFilterValue(dataMap.H)
+		? convertNanoToMilliseconds(Number(dataMap.H))
+		: undefined;
+
+	const latencyP95 = !isEmptyFilterValue(dataMap.I)
+		? convertNanoToMilliseconds(Number(dataMap.I))
+		: undefined;
+
+	const latencyAvg = !isEmptyFilterValue(dataMap.J)
+		? convertNanoToMilliseconds(Number(dataMap.J))
+		: undefined;
+
+	const latencyMax = !isEmptyFilterValue(dataMap.K)
+		? convertNanoToMilliseconds(Number(dataMap.K))
+		: undefined;
+
+	const latencyMin = !isEmptyFilterValue(dataMap.L)
+		? convertNanoToMilliseconds(Number(dataMap.L))
+		: undefined;
+
 	// Convert timestamp to relative time (only if valid)
 	const lastUsedFormatted = !isEmptyFilterValue(data[0].data.D)
 		? getLastUsedRelativeTime(new Date(data[0].data.D as string).getTime())
@@ -2277,6 +2564,13 @@ export const getFormattedEndPointMetricsData = (
 		latency: getDisplayValue(latencyInMs),
 		errorRate: getDisplayValue(dataMap.F1),
 		lastUsed: getDisplayValue(lastUsedFormatted),
+		p50Latency: getDisplayValue(latencyP50),
+		p90Latency: getDisplayValue(latencyP90),
+		p95Latency: getDisplayValue(latencyP95),
+		p99Latency: getDisplayValue(latencyInMs),
+		avgLatency: getDisplayValue(latencyAvg),
+		maxLatency: getDisplayValue(latencyMax),
+		minLatency: getDisplayValue(latencyMin),
 	};
 };
 
@@ -3130,7 +3424,7 @@ export const getRateOverTimeWidgetData = (
 					filter: {
 						expression: convertFiltersWithUrlHandling(
 							filters || { items: [], op: 'AND' },
-							`http_host = '${domainName}'`,
+							getDomainNameFilterExpression(domainName),
 						),
 					},
 					functions: [],
@@ -3162,8 +3456,8 @@ export const getLatencyOverTimeWidgetData = (
 		legend = `${endpoint}`;
 	}
 
-	return getWidgetQueryBuilder(
-		getWidgetQuery({
+	return getWidgetQueryBuilder({
+		...getWidgetQuery({
 			title: 'Latency Over Time',
 			description: 'Latency over time.',
 			queryData: [
@@ -3180,7 +3474,7 @@ export const getLatencyOverTimeWidgetData = (
 					filter: {
 						expression: convertFiltersWithUrlHandling(
 							filters || { items: [], op: 'AND' },
-							`http_host = '${domainName}'`,
+							getDomainNameFilterExpression(domainName),
 						),
 					},
 					functions: [],
@@ -3198,7 +3492,8 @@ export const getLatencyOverTimeWidgetData = (
 			],
 			yAxisUnit: 'ns',
 		}),
-	);
+		id: 'latency-over-time-widget',
+	});
 };
 
 /**

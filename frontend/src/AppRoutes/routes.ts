@@ -7,6 +7,7 @@ import {
 	AlertOverview,
 	AllErrors,
 	ApiMonitoring,
+	ExternalApi,
 	ChannelsEdit,
 	ChannelsNew,
 	CreateNewAlerts,
@@ -504,6 +505,13 @@ const routes: AppRoutes[] = [
 		exact: true,
 		component: ApiMonitoring,
 		key: 'API_MONITORING',
+		isPrivate: true,
+	},
+	{
+		path: ROUTES.EXTERNAL_API_BOARD,
+		exact: true,
+		component: ExternalApi,
+		key: 'EXTERNAL_API_BOARD',
 		isPrivate: true,
 	},
 	{

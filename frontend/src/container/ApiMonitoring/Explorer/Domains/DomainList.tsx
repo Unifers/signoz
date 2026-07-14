@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from 'react-query';
 // eslint-disable-next-line no-restricted-imports
 import { useSelector } from 'react-redux';
-import { Loader, MoveUpRight } from '@signozhq/icons';
-import { Spin, Table } from 'antd';
+import { Loader, MoveUpRight, Filter } from '@signozhq/icons';
+import { Spin, Table, Button, Tooltip } from 'antd';
 import logEvent from 'api/common/logEvent';
 import emptyStateUrl from 'assets/Icons/emptyState.svg';
 import cx from 'classnames';
@@ -33,7 +33,15 @@ import DomainDetails from './DomainDetails/DomainDetails';
 
 import '../Explorer.styles.scss';
 
-function DomainList(): JSX.Element {
+interface DomainListProps {
+	showQuickFilters: boolean;
+	setShowQuickFilters: (show: boolean) => void;
+}
+
+function DomainList({
+	showQuickFilters,
+	setShowQuickFilters,
+}: DomainListProps): JSX.Element {
 	const [params, setParams] = useApiMonitoringParams();
 	const { showIP, selectedDomain } = params;
 	const [selectedDomainIndex, setSelectedDomainIndex] = useState<number>(-1);
@@ -69,16 +77,20 @@ function DomainList(): JSX.Element {
 		handleRunQuery();
 	}, [queryClient, handleRunQuery]);
 
+	const filterExpression = get(
+		compositeData,
+		'builder.queryData[0].filter.expression',
+		'',
+	);
+
 	const { data, isLoading, isFetching } = useListOverview({
 		start: minTime,
 		end: maxTime,
 		show_ip: Boolean(showIP),
 		filter: {
-			expression: `kind_string = 'Client' ${get(
-				compositeData,
-				'builder.queryData[0].filter.expression',
-				'',
-			)}`,
+			expression: filterExpression
+				? `kind_string = 'Client' AND ${filterExpression}`
+				: `kind_string = 'Client'`,
 		},
 	});
 
@@ -141,7 +153,17 @@ function DomainList(): JSX.Element {
 	return (
 		<section className={cx('api-module-right-section')}>
 			<Toolbar
-				showAutoRefresh={false}
+				showAutoRefresh={true}
+				leftActions={
+					!showQuickFilters ? (
+						<Tooltip title="Show Quick Filters" placement="right">
+							<Button
+								icon={<Filter size={14} />}
+								onClick={(): void => setShowQuickFilters(true)}
+							/>
+						</Tooltip>
+					) : undefined
+				}
 				rightActions={
 					<RightToolbarActions
 						onStageRunQuery={handleStageAndRunQuery}

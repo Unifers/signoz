@@ -13,7 +13,15 @@ import {
 export const useListOverview = (
 	props: ListOverviewProps,
 ): UseQueryResult<SuccessResponseV2<PayloadProps>, APIError> => {
-	const { start, end, show_ip: showIp, filter } = props;
+	const {
+		start,
+		end,
+		show_ip: showIp,
+		filter,
+		group_by_url: groupByUrl,
+		globalRule,
+		apiRules,
+	} = props;
 	return useQuery<SuccessResponseV2<PayloadProps>, APIError>({
 		queryKey: [
 			REACT_QUERY_KEY.GET_DOMAINS_LIST,
@@ -21,6 +29,9 @@ export const useListOverview = (
 			end,
 			showIp,
 			filter.expression,
+			groupByUrl,
+			globalRule,
+			apiRules,
 		],
 		queryFn: ({ signal }) =>
 			listOverview(
@@ -29,6 +40,9 @@ export const useListOverview = (
 					end,
 					show_ip: showIp,
 					filter,
+					group_by_url: groupByUrl,
+					globalRule,
+					apiRules,
 				},
 				signal,
 			),

@@ -212,6 +212,24 @@ func TestList(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "with custom rules",
+			input: &thirdpartyapitypes.ThirdPartyApiRequest{
+				Start: 1000,
+				End:   2000,
+				GlobalRule: thirdpartyapitypes.RuleConfig{
+					ErrorCodes:   "5xx",
+					WarningCodes: "4xx",
+				},
+				ApiRules: map[string]thirdpartyapitypes.RuleConfig{
+					"google.com": {
+						ErrorCodes:   "2xx",
+						WarningCodes: "4xx",
+					},
+				},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -226,7 +244,7 @@ func TestList(t *testing.T) {
 			assert.Equal(t, tt.input.Start, result.Start)
 			assert.Equal(t, tt.input.End, result.End)
 			assert.NotNil(t, result.CompositeQuery)
-			assert.Len(t, result.CompositeQuery.Queries, 7) // endpoints, lastseen, rps, error, total_span, p99, error_rate
+			assert.Len(t, result.CompositeQuery.Queries, 10) // endpoints, lastseen, rps, total_span, error_span, warning_span, p99, avg, error_rate, warning_rate
 			assert.Equal(t, "v5", result.SchemaVersion)
 			assert.Equal(t, qbtypes.RequestTypeScalar, result.RequestType)
 		})
@@ -279,7 +297,7 @@ func TestBuildDomainInfo(t *testing.T) {
 			assert.Equal(t, tt.input.Start, result.Start)
 			assert.Equal(t, tt.input.End, result.End)
 			assert.NotNil(t, result.CompositeQuery)
-			assert.Len(t, result.CompositeQuery.Queries, 4) // endpoints, p99, error_rate, lastseen
+			assert.Len(t, result.CompositeQuery.Queries, 5) // endpoints, p99, avg, error_rate, lastseen
 			assert.Equal(t, "v5", result.SchemaVersion)
 			assert.Equal(t, qbtypes.RequestTypeScalar, result.RequestType)
 		})

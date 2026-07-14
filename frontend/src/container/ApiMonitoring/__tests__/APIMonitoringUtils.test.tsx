@@ -53,6 +53,7 @@ describe('API Monitoring Utils', () => {
 					'25', // rps
 					'2.5', // error_rate
 					'15000000', // p99 (ns) -> 15 ms
+					'10000000', // avg (ns) -> 10 ms
 					'2025-09-17T12:54:17.040Z', // lastseen
 				],
 			];
@@ -64,7 +65,8 @@ describe('API Monitoring Utils', () => {
 			expect(result[0].endpointCount).toBe('10');
 			expect(result[0].rate).toBe('25');
 			expect(result[0].errorRate).toBe('2.5');
-			expect(result[0].latency).toBe(15);
+			expect(result[0].latency).toBe(10);
+			expect(result[0].p99Latency).toBe(15);
 			expect(result[0].lastUsed).toBe('2025-09-17T12:54:17.040Z');
 		});
 
@@ -77,6 +79,7 @@ describe('API Monitoring Utils', () => {
 					'n/a', // rps -> '-'
 					'n/a', // error_rate -> 0
 					'n/a', // p99 -> '-'
+					'n/a', // avg -> '-'
 					'n/a', // lastseen -> '-'
 				],
 			];
@@ -87,6 +90,7 @@ describe('API Monitoring Utils', () => {
 			expect(result[0].rate).toBe('-');
 			expect(result[0].errorRate).toBe(0);
 			expect(result[0].latency).toBe('-');
+			expect(result[0].p99Latency).toBe('-');
 			expect(result[0].lastUsed).toBe('-');
 		});
 	});

@@ -67,6 +67,7 @@ function WidgetGraphComponent({
 	customTimeRangeWindowForCoRelation,
 	enableDrillDown,
 	hidePagination,
+	expandedViewFooter,
 }: WidgetGraphComponentProps): JSX.Element {
 	const { safeNavigate } = useSafeNavigate();
 	const [deleteModal, setDeleteModal] = useState(false);
@@ -363,6 +364,9 @@ function WidgetGraphComponent({
 				destroyOnClose
 				className="widget-full-view"
 			>
+				{expandedViewFooter && (
+					<div style={{ marginBottom: '16px' }}>{expandedViewFooter}</div>
+				)}
 				<FullView
 					name={`${widget.id}expanded`}
 					version={version}

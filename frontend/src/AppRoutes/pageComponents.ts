@@ -304,6 +304,10 @@ export const ApiMonitoring = Loadable(
 	() => import(/* webpackChunkName: "ApiMonitoring" */ 'pages/ApiMonitoring'),
 );
 
+export const ExternalApi = Loadable(
+	() => import(/* webpackChunkName: "ExternalApi" */ 'pages/ExternalApi'),
+);
+
 export const PublicDashboardPage = Loadable(
 	() =>
 		import(

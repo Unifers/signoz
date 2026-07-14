@@ -34,6 +34,10 @@ export interface APIDomainsRowData {
 	endpointCount: number | string;
 	rate: number | string;
 	errorRate: number | string;
+	warningRate?: number | string;
 	latency: number | string;
+	p99Latency: number | string;
 	lastUsed: string;
+	statusCode?: string;
+	totalSpan?: number;
 }

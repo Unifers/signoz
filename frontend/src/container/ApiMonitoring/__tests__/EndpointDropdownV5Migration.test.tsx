@@ -116,7 +116,7 @@ describe('EndpointDropdown - V5 Migration Validation', () => {
 
 			// Exact filter expression with custom filters merged
 			expect(expression).toBe(
-				`${SPAN_ATTRIBUTES.SERVER_NAME} = 'api.example.com' AND kind_string = 'Client' AND ${SPAN_ATTRIBUTES.HTTP_URL} EXISTS service.name = 'user-service' AND deployment.environment = 'production'`,
+				`(${SPAN_ATTRIBUTES.SERVER_NAME} = 'api.example.com' OR ${SPAN_ATTRIBUTES.HTTP_URL} LIKE 'http://api.example.com%' OR ${SPAN_ATTRIBUTES.HTTP_URL} LIKE 'https://api.example.com%') AND kind_string = 'Client' AND ${SPAN_ATTRIBUTES.HTTP_URL} EXISTS AND service.name = 'user-service' AND deployment.environment = 'production'`,
 			);
 		});
 	});

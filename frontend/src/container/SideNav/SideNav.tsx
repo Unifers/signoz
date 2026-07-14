@@ -291,7 +291,10 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 			if (item.key === ROUTES.INTEGRATIONS) {
 				return (isCloudUser || isEnterpriseSelfHostedUser) && (isAdmin || isEditor);
 			}
-			if (item.key === ROUTES.API_MONITORING) {
+			if (
+				item.key === ROUTES.API_MONITORING ||
+				item.key === ROUTES.EXTERNAL_API_BOARD
+			) {
 				return hasExternalApiAccess;
 			}
 			return item.isEnabled !== false;

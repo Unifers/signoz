@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQueries } from 'react-query';
+import { useQueries, useQuery } from 'react-query';
+import { useLocation } from 'react-router-dom';
+import { Card, Spin } from 'antd';
 import { ENTITY_VERSION_V4, ENTITY_VERSION_V5 } from 'constants/app';
 import { initialQueriesMap } from 'constants/queryBuilder';
 import { REACT_QUERY_KEY } from 'constants/reactQueryKeys';
 import { useApiMonitoringParams } from 'container/ApiMonitoring/queryParams';
 import {
 	END_POINT_DETAILS_QUERY_KEYS_ARRAY,
+	convertFiltersWithUrlHandling,
 	extractPortAndEndpoint,
+	getDomainNameFilterExpression,
 	getEndPointDetailsQueryPayload,
+	getFormattedEndPointMetricsData,
 	getLatencyOverTimeWidgetData,
 	getRateOverTimeWidgetData,
 } from 'container/ApiMonitoring/utils';
+import DateTimeSelectionV2 from 'container/TopNav/DateTimeSelectionV2';
+import GetMinMax from 'lib/getMinMax';
 import QueryBuilderSearchV2 from 'container/QueryBuilder/filters/QueryBuilderSearchV2/QueryBuilderSearchV2';
 import {
 	CustomTimeType,
@@ -21,7 +28,8 @@ import { SuccessResponse } from 'types/api';
 import { MetricRangePayloadProps } from 'types/api/metrics/getQueryRange';
 import { DataTypes } from 'types/api/queryBuilder/queryAutocompleteResponse';
 import { IBuilderQuery } from 'types/api/queryBuilder/queryBuilderData';
-import { DataSource } from 'types/common/queryBuilder';
+import { EQueryType } from 'types/common/dashboard';
+import { DataSource, ReduceOperators } from 'types/common/queryBuilder';
 
 import DependentServices from './components/DependentServices';
 import EndPointMetrics from './components/EndPointMetrics';
@@ -35,6 +43,13 @@ const httpUrlKey = {
 	dataType: DataTypes.String,
 	key: SPAN_ATTRIBUTES.HTTP_URL,
 	type: 'tag',
+};
+
+const stripQueryParams = (url: string): string => {
+	if (!url) {
+		return '';
+	}
+	return url.split('?')[0];
 };
 
 function EndPointDetails({
@@ -70,11 +85,12 @@ function EndPointDetails({
 			? [...(params.endPointDetailsLocalFilters?.items || [])]
 			: [...(initialFilters?.items || [])];
 		if (endPointName) {
+			const cleanEndPointName = stripQueryParams(endPointName);
 			initialItems.push({
 				id: '92b8a1c1',
 				key: httpUrlKey,
-				op: '=',
-				value: endPointName,
+				op: 'LIKE',
+				value: `${cleanEndPointName}%`,
 			});
 		}
 		return { op: 'AND', items: initialItems };
@@ -88,8 +104,13 @@ function EndPointDetails({
 			);
 			const existingHttpUrlValue = (existingHttpUrlFilter?.value as string) || '';
 
+			const cleanEndPointName = stripQueryParams(endPointName);
+			const cleanExistingValue = existingHttpUrlValue.endsWith('%')
+				? existingHttpUrlValue.slice(0, -1)
+				: existingHttpUrlValue;
+
 			// Only update filters if the prop value is different from what's already in filters
-			if (endPointName === existingHttpUrlValue) {
+			if (cleanEndPointName === cleanExistingValue) {
 				return currentFilters; // No change needed, prevents loop
 			}
 
@@ -102,8 +123,8 @@ function EndPointDetails({
 				newItems.push({
 					id: '92b8a1c1',
 					key: httpUrlKey,
-					op: '=',
-					value: endPointName,
+					op: 'LIKE',
+					value: `${cleanEndPointName}%`,
 				});
 			}
 			return { op: 'AND', items: newItems };
@@ -138,7 +159,10 @@ function EndPointDetails({
 			const httpUrlFilter = newFilters?.items?.find(
 				(item) => item.key?.key === httpUrlKey.key,
 			);
-			const derivedEndPointName = (httpUrlFilter?.value as string) || '';
+			const derivedEndPointValue = (httpUrlFilter?.value as string) || '';
+			const derivedEndPointName = derivedEndPointValue.endsWith('%')
+				? derivedEndPointValue.slice(0, -1)
+				: derivedEndPointValue;
 
 			// 3. If the derived endpoint name is different from the current prop,
 			//    it means the search change modified the effective endpoint.
@@ -226,18 +250,242 @@ function EndPointDetails({
 		],
 		[endPointDetailsDataQueries],
 	);
+	const metricsData = useMemo(() => {
+		if (
+			endPointMetricsDataQuery.isLoading ||
+			endPointMetricsDataQuery.isRefetching ||
+			endPointMetricsDataQuery.isError ||
+			!endPointMetricsDataQuery.data
+		) {
+			return null;
+		}
 
+		return getFormattedEndPointMetricsData(
+			endPointMetricsDataQuery.data?.payload?.data?.result[0]?.table?.rows as any,
+		);
+	}, [
+		endPointMetricsDataQuery.data,
+		endPointMetricsDataQuery.isLoading,
+		endPointMetricsDataQuery.isRefetching,
+		endPointMetricsDataQuery.isError,
+	]);
 	const { endpoint, port } = useMemo(
 		() => extractPortAndEndpoint(endPointName), // Derive display info from the prop
 		[endPointName],
 	);
+
+	const { search } = useLocation();
+
+	const isExpanded = useMemo(() => {
+		const searchParams = new URLSearchParams(search);
+		return searchParams.get('expandedWidgetId') === 'latency-over-time-widget';
+	}, [search]);
+
+	const modalSelectedTimeRange = useMemo(() => {
+		if (params.modalSelectedTimeRange) {
+			return params.modalSelectedTimeRange;
+		}
+		return timeRange; // fallback to drawer's time range
+	}, [params.modalSelectedTimeRange, timeRange]);
+
+	const modalQueryPayload = useMemo(() => {
+		const filterExpr = convertFiltersWithUrlHandling(
+			filters || { items: [], op: 'AND' },
+			getDomainNameFilterExpression(domainName),
+		);
+
+		return {
+			selectedTime: 'GLOBAL_TIME',
+			graphType: 'table',
+			query: {
+				queryType: EQueryType.QUERY_BUILDER,
+				builder: {
+					queryData: [
+						{
+							aggregations: [{ expression: 'p50(duration_nano)' }],
+							aggregateOperator: 'p50',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'A',
+							filter: { expression: filterExpr },
+							queryName: 'A',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'p50',
+						},
+						{
+							aggregations: [{ expression: 'p90(duration_nano)' }],
+							aggregateOperator: 'p90',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'B',
+							filter: { expression: filterExpr },
+							queryName: 'B',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'p90',
+						},
+						{
+							aggregations: [{ expression: 'p95(duration_nano)' }],
+							aggregateOperator: 'p95',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'C',
+							filter: { expression: filterExpr },
+							queryName: 'C',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'p95',
+						},
+						{
+							aggregations: [{ expression: 'p99(duration_nano)' }],
+							aggregateOperator: 'p99',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'D',
+							filter: { expression: filterExpr },
+							queryName: 'D',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'p99',
+						},
+						{
+							aggregations: [{ expression: 'avg(duration_nano)' }],
+							aggregateOperator: 'avg',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'E',
+							filter: { expression: filterExpr },
+							queryName: 'E',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'avg',
+						},
+						{
+							aggregations: [{ expression: 'max(duration_nano)' }],
+							aggregateOperator: 'max',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'F',
+							filter: { expression: filterExpr },
+							queryName: 'F',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'max',
+						},
+						{
+							aggregations: [{ expression: 'min(duration_nano)' }],
+							aggregateOperator: 'min',
+							dataSource: DataSource.TRACES,
+							disabled: false,
+							expression: 'G',
+							filter: { expression: filterExpr },
+							queryName: 'G',
+							reduceTo: ReduceOperators.AVG,
+							timeAggregation: 'min',
+						},
+					],
+				},
+			},
+			start: modalSelectedTimeRange.startTime,
+			end: modalSelectedTimeRange.endTime,
+		} as any;
+	}, [domainName, filters, modalSelectedTimeRange]);
+
+	const modalMetricsQuery = useQuery(
+		[
+			REACT_QUERY_KEY.GET_ENDPOINT_METRICS_DATA,
+			'modal',
+			modalQueryPayload,
+			...(filters?.items?.length ? filters.items : []),
+			ENTITY_VERSION_V5,
+		],
+		() => GetMetricQueryRange(modalQueryPayload, ENTITY_VERSION_V5),
+		{
+			enabled: isExpanded && !!modalQueryPayload,
+			keepPreviousData: true,
+		},
+	);
+
+	const modalMetricsData = useMemo(() => {
+		if (
+			modalMetricsQuery.isLoading ||
+			modalMetricsQuery.isRefetching ||
+			modalMetricsQuery.isError ||
+			!modalMetricsQuery.data
+		) {
+			return null;
+		}
+
+		const rows =
+			modalMetricsQuery.data?.payload?.data?.result?.[0]?.table?.rows ||
+			modalMetricsQuery.data?.payload?.data?.newResult?.data?.result?.[0]?.table
+				?.rows;
+		if (!rows || rows.length === 0) {
+			return null;
+		}
+
+		const rowData = rows[0]?.data || {};
+
+		const getMs = (val: unknown): string => {
+			if (val === undefined || val === null || val === '' || val === 'n/a') {
+				return '-';
+			}
+			return String(Math.round(Number(val) / 1000000));
+		};
+
+		return {
+			p50Latency: getMs(rowData.A),
+			p90Latency: getMs(rowData.B),
+			p95Latency: getMs(rowData.C),
+			p99Latency: getMs(rowData.D),
+			avgLatency: getMs(rowData.E),
+			maxLatency: getMs(rowData.F),
+			minLatency: getMs(rowData.G),
+		};
+	}, [
+		modalMetricsQuery.data,
+		modalMetricsQuery.isLoading,
+		modalMetricsQuery.isRefetching,
+		modalMetricsQuery.isError,
+	]);
+
+	const activeMetricsData = modalMetricsData || metricsData;
+
+	const TimeRangeOffset = 1000000000;
+
+	const handleModalTimeChange = useCallback(
+		(interval: Time | CustomTimeType, dateTimeRange?: [number, number]): void => {
+			setParams({ modalSelectedTimeInterval: interval as string });
+
+			if (interval === 'custom' && dateTimeRange) {
+				const newRange = {
+					startTime: Math.floor(dateTimeRange[0] / 1000),
+					endTime: Math.floor(dateTimeRange[1] / 1000),
+				};
+				setParams({ modalSelectedTimeRange: newRange });
+			} else {
+				const { maxTime, minTime } = GetMinMax(interval);
+
+				const newRange = {
+					startTime: Math.floor(minTime / TimeRangeOffset),
+					endTime: Math.floor(maxTime / TimeRangeOffset),
+				};
+				setParams({ modalSelectedTimeRange: newRange });
+			}
+		},
+		[setParams],
+	);
+
+	useEffect(() => {
+		if (!isExpanded) {
+			setParams({
+				modalSelectedTimeRange: undefined,
+				modalSelectedTimeInterval: undefined,
+			});
+		}
+	}, [isExpanded, setParams]);
 
 	const [rateOverTimeWidget, latencyOverTimeWidget] = useMemo(
 		() => [
 			getRateOverTimeWidgetData(domainName, endPointName, filters),
 			getLatencyOverTimeWidgetData(domainName, endPointName, filters),
 		],
-		[domainName, endPointName, filters], // Use combinedFilters
+		[domainName, endPointName, filters],
 	);
 
 	// // [TODO] Fix this later
@@ -313,6 +561,197 @@ function EndPointDetails({
 				widget={latencyOverTimeWidget}
 				timeRange={timeRange}
 				onDragSelect={onDragSelect}
+				expandedViewFooter={
+					<Card
+						bordered
+						style={{
+							background: 'var(--l1-background)',
+							borderColor: 'var(--l1-border)',
+							borderRadius: '8px',
+							fontFamily:
+								'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+						}}
+						headStyle={{
+							borderBottom: 'none',
+							padding: '16px 16px 8px 16px',
+							minHeight: 'auto',
+							fontWeight: 600,
+							fontSize: '14px',
+							color: 'var(--l1-foreground)',
+							fontFamily:
+								'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+						}}
+						bodyStyle={{
+							padding: '0 16px 16px 16px',
+							fontFamily:
+								'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+							fontSize: '14px',
+							color: 'var(--l2-foreground)',
+						}}
+						title="Latency Percentiles"
+						extra={
+							<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+								{(modalMetricsQuery.isLoading || modalMetricsQuery.isFetching) && (
+									<Spin size="small" />
+								)}
+								<DateTimeSelectionV2
+									showAutoRefresh={false}
+									showRefreshText={false}
+									onTimeChange={handleModalTimeChange}
+									defaultRelativeTime="5m"
+									isModalTimeSelection
+									modalSelectedInterval={
+										(params.modalSelectedTimeInterval as Time) ||
+										(params.selectedInterval as Time) ||
+										'5m'
+									}
+									modalInitialStartTime={modalSelectedTimeRange.startTime * 1000}
+									modalInitialEndTime={modalSelectedTimeRange.endTime * 1000}
+								/>
+							</div>
+						}
+					>
+						<div style={{ gap: '24px' }}>
+							<div
+								style={{
+									display: 'flex',
+									gap: '24px',
+									flexWrap: 'wrap',
+									paddingBottom: '5px',
+								}}
+							>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#52c41a',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>P50:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.p50Latency !== undefined &&
+										activeMetricsData?.p50Latency !== '-'
+											? `${activeMetricsData.p50Latency} ms`
+											: '-'}
+									</span>
+								</div>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#1890ff',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>P90:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.p90Latency !== undefined &&
+										activeMetricsData?.p90Latency !== '-'
+											? `${activeMetricsData.p90Latency} ms`
+											: '-'}
+									</span>
+								</div>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#fa8c16',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>P95:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.p95Latency !== undefined &&
+										activeMetricsData?.p95Latency !== '-'
+											? `${activeMetricsData.p95Latency} ms`
+											: '-'}
+									</span>
+								</div>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#f5222d',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>P99:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.p99Latency !== undefined &&
+										activeMetricsData?.p99Latency !== '-'
+											? `${activeMetricsData.p99Latency} ms`
+											: '-'}
+									</span>
+								</div>
+							</div>
+							<div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#722ed1',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>Avg:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.avgLatency !== undefined &&
+										activeMetricsData?.avgLatency !== '-'
+											? `${activeMetricsData.avgLatency} ms`
+											: '-'}
+									</span>
+								</div>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#eb2f96',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>Max:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.maxLatency !== undefined &&
+										activeMetricsData?.maxLatency !== '-'
+											? `${activeMetricsData.maxLatency} ms`
+											: '-'}
+									</span>
+								</div>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<span
+										style={{
+											width: '12px',
+											height: '12px',
+											borderRadius: '50%',
+											background: '#13c2c2',
+											display: 'inline-block',
+										}}
+									/>
+									<span style={{ color: 'var(--l2-foreground)' }}>Min:</span>
+									<span style={{ color: 'var(--l1-foreground)' }}>
+										{activeMetricsData?.minLatency !== undefined &&
+										activeMetricsData?.minLatency !== '-'
+											? `${activeMetricsData.minLatency} ms`
+											: '-'}
+									</span>
+								</div>
+							</div>
+						</div>
+					</Card>
+				}
 			/>
 		</div>
 	);
