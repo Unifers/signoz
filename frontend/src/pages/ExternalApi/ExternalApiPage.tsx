@@ -244,6 +244,9 @@ function ExternalApiPage(): JSX.Element {
 
 		const formattedRows = formatDataForTable(rows, columns);
 
+		// Time-range in seconds (minTime / maxTime are in nanoseconds)
+		const timeRangeSeconds = (maxTime - minTime) / 1_000_000_000;
+
 		// Group rows by path-without-query-params, merging metrics for same endpoint
 		const groupedMap = new Map<string, ExternalApiRowData>();
 
@@ -270,6 +273,8 @@ function ExternalApiPage(): JSX.Element {
 					? row.p99Latency
 					: Number(row.p99Latency) || 0;
 			const lastUsedVal = row.lastUsed;
+			// Estimate total requests for this row from rate × time-range
+			const rowTotalCount = Math.round(rateVal * timeRangeSeconds);
 
 			if (groupedMap.has(cleanEndpoint)) {
 				// Merge into existing entry: sum rates, average error/latency, keep latest lastUsed
@@ -306,6 +311,7 @@ function ExternalApiPage(): JSX.Element {
 					latency: mergedLatency,
 					p99Latency: mergedP99,
 					lastUsed: mergedLastUsed,
+					totalCount: existing.totalCount + rowTotalCount,
 					// status will be recalculated below
 				});
 			} else {
@@ -320,7 +326,7 @@ function ExternalApiPage(): JSX.Element {
 					successRate: 100 - errorRate - warningRate,
 					latency: latencyVal,
 					p99Latency: p99LatencyVal,
-					totalCount: 0,
+					totalCount: rowTotalCount,
 					_activeRule: activeRule,
 				} as any);
 			}
@@ -362,10 +368,10 @@ function ExternalApiPage(): JSX.Element {
 				successRate: 100 - item.errorRate - item.warningRate,
 				latency: item.latency,
 				p99Latency: item.p99Latency,
-				totalCount: 0,
+				totalCount: item.totalCount,
 			};
 		});
-	}, [queryResponse.data, globalRule, apiRules]);
+	}, [queryResponse.data, globalRule, apiRules, minTime, maxTime]);
 
 	const selectedDomainData = useMemo<APIDomainsRowData | null>(() => {
 		if (!selectedDomain) {
@@ -527,6 +533,17 @@ function ExternalApiPage(): JSX.Element {
 			align: 'right' as const,
 			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
 				a.rate - b.rate,
+		},
+		{
+			title: 'Total Requests',
+			dataIndex: 'totalCount',
+			key: 'totalCount',
+			width: '12%',
+			align: 'right' as const,
+			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+				a.totalCount - b.totalCount,
+			render: (totalCount: number): string =>
+				totalCount > 0 ? totalCount.toLocaleString() : '-',
 		},
 		{
 			title: (
