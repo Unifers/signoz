@@ -61,7 +61,7 @@ services:
 
   # ── ClickHouse schema migrator (runs once then exits) ─────────────────────
   clickhouse-migrator:
-    image: signoz/signoz-otel-collector:v0.142.0
+    image: signoz/signoz-otel-collector:v0.144.3
     container_name: signoz-clickhouse-migrator
     depends_on:
       clickhouse:
@@ -84,7 +84,7 @@ services:
 
   # ── OTel Collector (receives telemetry from your apps) ────────────────────
   otel-collector:
-    image: signoz/signoz-otel-collector:v0.142.0
+    image: signoz/signoz-otel-collector:v0.144.3
     container_name: signoz-otel-collector
     hostname: otel-collector
     depends_on:

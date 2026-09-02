@@ -336,15 +336,6 @@ func (m *module) buildTopOpsQueryRangeRequest(req *servicetypesv1.OperationsRequ
 	tags := append([]servicetypesv1.TagFilterItem{serviceTag}, req.Tags...)
 	filterExpr, variables := buildFilterExpression(tags)
 
-	if req.OnlyApis {
-		apiExpr := "(name REGEX '(?i)^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\\s+(/|https?://)' OR name REGEX '^/')"
-		if filterExpr != "" {
-			filterExpr = "(" + filterExpr + ") AND (" + apiExpr + ")"
-		} else {
-			filterExpr = apiExpr
-		}
-	}
-
 	reqV5 := qbtypes.QueryRangeRequest{
 		Start:       startMs,
 		End:         endMs,
@@ -457,10 +448,6 @@ func (m *module) buildEntryPointOpsQueryRangeRequest(req *servicetypesv1.Operati
 	tags := append([]servicetypesv1.TagFilterItem{serviceTag}, req.Tags...)
 	filterExpr, variables := buildFilterExpression(tags)
 	scopeExpr := "isRoot = true OR isEntryPoint = true"
-	if req.OnlyApis {
-		apiExpr := "(name REGEX '(?i)^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\\s+(/|https?://)' OR name REGEX '^/')"
-		scopeExpr = "(" + scopeExpr + ") AND (" + apiExpr + ")"
-	}
 	if filterExpr != "" {
 		filterExpr = "(" + filterExpr + ") AND (" + scopeExpr + ")"
 	} else {
