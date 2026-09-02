@@ -159,6 +159,8 @@ jobs:
     name: "Build & Push Docker Image"
     runs-on: ubuntu-latest
     needs: [js-build, go-build]
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -205,10 +207,10 @@ jobs:
 
       - name: Log in to Docker Hub
         # Login if DOCKERHUB_USERNAME secret is configured
-        if: github.event_name != 'pull_request' && secrets.DOCKERHUB_USERNAME != ''
+        if: github.event_name != 'pull_request' && env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # ── Compute Docker images list ─────────────
@@ -216,8 +218,8 @@ jobs:
         id: image-destinations
         run: |
           IMAGES="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            IMAGES="${IMAGES}"$'\n'"${{ secrets.DOCKERHUB_USERNAME }}/signoz"
+          if [ -n "$DOCKERHUB_USERNAME" ]; then
+            IMAGES="${IMAGES}"$'\n'"$DOCKERHUB_USERNAME/signoz"
           fi
           echo "images<<EOF" >> $GITHUB_OUTPUT
           echo "$IMAGES" >> $GITHUB_OUTPUT
@@ -267,8 +269,8 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **GHCR Registry** | \`${{ env.REGISTRY }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **GHCR Image** | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "| **Docker Hub Image** | \`docker.io/${{ secrets.DOCKERHUB_USERNAME }}/signoz\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$DOCKERHUB_USERNAME" ]; then
+            echo "| **Docker Hub Image** | \`docker.io/$DOCKERHUB_USERNAME/signoz\` |" >> $GITHUB_STEP_SUMMARY
           fi
           echo "| **Tags** | \`${{ steps.docker-meta.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Pushed** | ${{ github.event_name != 'pull_request' && '✅ Yes' || '⛔ No (PR build)' }} |" >> $GITHUB_STEP_SUMMARY
