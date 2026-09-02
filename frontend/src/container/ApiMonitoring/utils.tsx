@@ -335,17 +335,23 @@ export const formatDataForTable = (
 			) {
 				acc[domainNameKey] = index;
 			} else {
-				acc[column.queryName || column.name] = index;
+				if (column.queryName) {
+					acc[column.queryName] = index;
+				}
+				if (column.name) {
+					acc[column.name] = index;
+				}
 			}
 			return acc;
 		},
 		{} as Record<string, number>,
 	);
 
-	return data.map((row) => {
+	return data.map((row, index) => {
+		const domainName = row[indexMap[domainNameKey]];
 		const rowData: APIDomainsRowData = {
-			key: v4(),
-			domainName: row[indexMap[domainNameKey]],
+			key: domainName || `row-${index}`,
+			domainName,
 			endpointCount:
 				row[indexMap.endpoints] === 'n/a' || row[indexMap.endpoints] === undefined
 					? 0

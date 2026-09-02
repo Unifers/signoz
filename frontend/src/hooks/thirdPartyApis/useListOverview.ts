@@ -30,8 +30,8 @@ export const useListOverview = (
 			showIp,
 			filter.expression,
 			groupByUrl,
-			globalRule,
-			apiRules,
+			JSON.stringify(globalRule),
+			JSON.stringify(apiRules),
 		],
 		queryFn: ({ signal }) =>
 			listOverview(
@@ -46,6 +46,10 @@ export const useListOverview = (
 				},
 				signal,
 			),
+		staleTime: 60 * 1000,
+		cacheTime: 5 * 60 * 1000,
+		keepPreviousData: true,
+		refetchOnWindowFocus: false,
 		retry: (failureCount, error): boolean => {
 			if (isAxiosError(error) && error.code === 'ERR_CANCELED') {
 				return false;

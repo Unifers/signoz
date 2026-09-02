@@ -124,7 +124,7 @@ func (m *module) GetTopOperations(ctx context.Context, orgUUID valuer.UUID, req 
 		return nil, err
 	}
 
-	items := m.mapTopOpsQueryRangeResp(resp)
+	items := m.mapTopOpsQueryRangeResp(resp, req.OnlyApis)
 	return items, nil
 }
 
@@ -145,7 +145,7 @@ func (m *module) GetEntryPointOperations(ctx context.Context, orgUUID valuer.UUI
 		return nil, err
 	}
 
-	items := m.mapEntryPointOpsQueryRangeResp(resp)
+	items := m.mapEntryPointOpsQueryRangeResp(resp, req.OnlyApis)
 	return items, nil
 }
 
@@ -336,6 +336,15 @@ func (m *module) buildTopOpsQueryRangeRequest(req *servicetypesv1.OperationsRequ
 	tags := append([]servicetypesv1.TagFilterItem{serviceTag}, req.Tags...)
 	filterExpr, variables := buildFilterExpression(tags)
 
+	if req.OnlyApis {
+		apiExpr := "(name REGEX '(?i)^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\\s+(/|https?://)' OR name REGEX '^/')"
+		if filterExpr != "" {
+			filterExpr = "(" + filterExpr + ") AND (" + apiExpr + ")"
+		} else {
+			filterExpr = apiExpr
+		}
+	}
+
 	reqV5 := qbtypes.QueryRangeRequest{
 		Start:       startMs,
 		End:         endMs,
@@ -374,7 +383,7 @@ func (m *module) buildTopOpsQueryRangeRequest(req *servicetypesv1.OperationsRequ
 	return &reqV5, nil
 }
 
-func (m *module) mapTopOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse) []servicetypesv1.OperationItem {
+func (m *module) mapTopOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse, onlyApis bool) []servicetypesv1.OperationItem {
 	if resp == nil || len(resp.Data.Results) == 0 {
 		return []servicetypesv1.OperationItem{}
 	}
@@ -398,8 +407,12 @@ func (m *module) mapTopOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse) []ser
 
 	out := make([]servicetypesv1.OperationItem, 0, len(sd.Data))
 	for _, row := range sd.Data {
+		name := fmt.Sprintf("%v", row[nameIdx])
+		if onlyApis && !IsApiOperation(name) {
+			continue
+		}
 		item := servicetypesv1.OperationItem{
-			Name:       fmt.Sprintf("%v", row[nameIdx]),
+			Name:       name,
 			P50:        toFloat(row, aggIdx[0]),
 			P95:        toFloat(row, aggIdx[1]),
 			P99:        toFloat(row, aggIdx[2]),
@@ -444,6 +457,10 @@ func (m *module) buildEntryPointOpsQueryRangeRequest(req *servicetypesv1.Operati
 	tags := append([]servicetypesv1.TagFilterItem{serviceTag}, req.Tags...)
 	filterExpr, variables := buildFilterExpression(tags)
 	scopeExpr := "isRoot = true OR isEntryPoint = true"
+	if req.OnlyApis {
+		apiExpr := "(name REGEX '(?i)^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\\s+(/|https?://)' OR name REGEX '^/')"
+		scopeExpr = "(" + scopeExpr + ") AND (" + apiExpr + ")"
+	}
 	if filterExpr != "" {
 		filterExpr = "(" + filterExpr + ") AND (" + scopeExpr + ")"
 	} else {
@@ -488,7 +505,7 @@ func (m *module) buildEntryPointOpsQueryRangeRequest(req *servicetypesv1.Operati
 	return &reqV5, nil
 }
 
-func (m *module) mapEntryPointOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse) []servicetypesv1.OperationItem {
+func (m *module) mapEntryPointOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse, onlyApis bool) []servicetypesv1.OperationItem {
 	if resp == nil || len(resp.Data.Results) == 0 {
 		return []servicetypesv1.OperationItem{}
 	}
@@ -512,8 +529,12 @@ func (m *module) mapEntryPointOpsQueryRangeResp(resp *qbtypes.QueryRangeResponse
 
 	out := make([]servicetypesv1.OperationItem, 0, len(sd.Data))
 	for _, row := range sd.Data {
+		name := fmt.Sprintf("%v", row[nameIdx])
+		if onlyApis && !IsApiOperation(name) {
+			continue
+		}
 		item := servicetypesv1.OperationItem{
-			Name:       fmt.Sprintf("%v", row[nameIdx]),
+			Name:       name,
 			P50:        toFloat(row, aggIdx[0]),
 			P95:        toFloat(row, aggIdx[1]),
 			P99:        toFloat(row, aggIdx[2]),

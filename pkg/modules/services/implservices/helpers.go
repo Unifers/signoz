@@ -2,6 +2,7 @@ package implservices
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/SigNoz/signoz/pkg/errors"
@@ -129,4 +130,69 @@ func applyOpsToItems(items []*servicetypesv1.ResponseItem, opsMap map[string][]s
 			items[i].DataWarning.TopLevelOps = tops
 		}
 	}
+}
+
+var (
+	httpMethodWithRouteRegex = regexp.MustCompile(`(?i)^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\s+(/|https?://)`)
+	httpPrefixWithRouteRegex = regexp.MustCompile(`(?i)^HTTP(/\d(\.\d)?)?\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(/|https?://)`)
+	sqlQueryRegex            = regexp.MustCompile(`(?i)^(select|insert|update|delete\s+from|delete\s+low_priority|delete\s+quick|create|alter|drop|truncate)\b`)
+	grpcMethodRegex          = regexp.MustCompile(`^[a-zA-Z0-9_.]+\/[a-zA-Z0-9_]+$`)
+	fullURLRegex             = regexp.MustCompile(`(?i)^https?://`)
+)
+
+func IsApiOperation(operationName string) bool {
+	trimmed := strings.TrimSpace(operationName)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	internalPrefixes := []string{
+		"request handler",
+		"middleware",
+		"router -",
+		"router.",
+		"tcp.",
+		"dns.",
+		"fs.",
+		"net.",
+		"tls.",
+		"http.client",
+		"grpc.client",
+		"pg.",
+		"redis.",
+		"mongodb.",
+		"amqp.",
+		"kafka.",
+	}
+	for _, p := range internalPrefixes {
+		if strings.HasPrefix(lower, p) {
+			return false
+		}
+	}
+
+	if sqlQueryRegex.MatchString(trimmed) {
+		return false
+	}
+
+	if httpMethodWithRouteRegex.MatchString(trimmed) {
+		return true
+	}
+
+	if httpPrefixWithRouteRegex.MatchString(trimmed) {
+		return true
+	}
+
+	if strings.HasPrefix(trimmed, "/") {
+		return true
+	}
+
+	if fullURLRegex.MatchString(trimmed) {
+		return true
+	}
+
+	if grpcMethodRegex.MatchString(trimmed) {
+		return true
+	}
+
+	return false
 }

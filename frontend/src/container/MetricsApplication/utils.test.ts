@@ -4,6 +4,7 @@ import {
 	convertedTracesToDownloadData,
 	getErrorRate,
 	getNearestHighestBucketValue,
+	isApiOperation,
 } from './utils';
 
 describe('Error Rate', () => {
@@ -66,5 +67,57 @@ describe('convertedTracesToDownloadData', () => {
 				'Error Rate (%)': '10.00',
 			},
 		]);
+	});
+});
+
+describe('isApiOperation', () => {
+	it('should return true for HTTP methods with path', () => {
+		expect(isApiOperation('POST /enrich/get-vehicle-challans')).toBe(true);
+		expect(isApiOperation('GET /api/v1/users')).toBe(true);
+		expect(isApiOperation('PUT /items/42')).toBe(true);
+		expect(isApiOperation('DELETE /items/42')).toBe(true);
+		expect(isApiOperation('PATCH /orders/1')).toBe(true);
+	});
+
+	it('should return false for bare HTTP method names without endpoint path', () => {
+		expect(isApiOperation('GET')).toBe(false);
+		expect(isApiOperation('POST')).toBe(false);
+		expect(isApiOperation('PUT')).toBe(false);
+		expect(isApiOperation('DELETE')).toBe(false);
+		expect(isApiOperation('get')).toBe(false);
+		expect(isApiOperation('post')).toBe(false);
+	});
+
+	it('should return true for path-like operation names', () => {
+		expect(isApiOperation('/enrich/get-vehicle-challans')).toBe(true);
+		expect(isApiOperation('/api/v1/checkout')).toBe(true);
+		expect(isApiOperation('/healthz')).toBe(true);
+	});
+
+	it('should return false for express handler/middleware spans and internal spans', () => {
+		expect(isApiOperation('request handler - /enrich/get-vehicle-challans')).toBe(
+			false,
+		);
+		expect(isApiOperation('middleware - query')).toBe(false);
+		expect(isApiOperation('router - /api')).toBe(false);
+		expect(isApiOperation('tcp.connect')).toBe(false);
+		expect(isApiOperation('dns.lookup')).toBe(false);
+		expect(isApiOperation('fs.readFile')).toBe(false);
+		expect(isApiOperation('redis.get')).toBe(false);
+		expect(isApiOperation('mongodb.find')).toBe(false);
+	});
+
+	it('should return false for database queries', () => {
+		expect(isApiOperation('SELECT * FROM users')).toBe(false);
+		expect(isApiOperation('DELETE FROM users WHERE id = 1')).toBe(false);
+		expect(isApiOperation('INSERT INTO logs VALUES(1)')).toBe(false);
+		expect(isApiOperation('UPDATE users SET name = "test"')).toBe(false);
+	});
+
+	it('should return false for empty, null, or invalid input', () => {
+		expect(isApiOperation('')).toBe(false);
+		expect(isApiOperation('   ')).toBe(false);
+		expect(isApiOperation(null as any)).toBe(false);
+		expect(isApiOperation(undefined as any)).toBe(false);
 	});
 });

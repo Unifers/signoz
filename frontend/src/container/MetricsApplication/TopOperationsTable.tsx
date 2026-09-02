@@ -1,9 +1,10 @@
-import { useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 // eslint-disable-next-line no-restricted-imports
 import { useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { Search } from '@signozhq/icons';
 import {
+	Button,
 	InputRef,
 	TableColumnsType as ColumnsType,
 	TableColumnType as ColumnType,
@@ -29,6 +30,7 @@ import { useGetAPMToTracesQueries } from './Tabs/util';
 import {
 	convertedTracesToDownloadData,
 	getErrorRate,
+	isApiOperation,
 	navigateToTrace,
 } from './utils';
 
@@ -39,7 +41,28 @@ function TopOperationsTable({
 	isLoading,
 	isEntryPoint,
 	onEntryPointToggle,
+	isOnlyApis: isOnlyApisProp,
+	onOnlyApisToggle,
 }: TopOperationsTableProps): JSX.Element {
+	const [internalIsOnlyApis, setInternalIsOnlyApis] = useState<boolean>(false);
+	const isOnlyApis =
+		isOnlyApisProp !== undefined ? isOnlyApisProp : internalIsOnlyApis;
+
+	const handleOnlyApisToggle = (): void => {
+		if (onOnlyApisToggle) {
+			onOnlyApisToggle(!isOnlyApis);
+		} else {
+			setInternalIsOnlyApis(!internalIsOnlyApis);
+		}
+	};
+
+	const displayData = useMemo(() => {
+		if (!isOnlyApis) {
+			return data;
+		}
+		return data.filter((item) => isApiOperation(item.name));
+	}, [data, isOnlyApis]);
+
 	const searchInput = useRef<InputRef>(null);
 	const { servicename: encodedServiceName } = useParams<IServiceName>();
 	const { safeNavigate } = useSafeNavigate();
@@ -187,7 +210,7 @@ function TopOperationsTable({
 		},
 	];
 
-	const downloadableData = convertedTracesToDownloadData(data);
+	const downloadableData = convertedTracesToDownloadData(displayData);
 
 	const paginationConfig = {
 		pageSize: 10,
@@ -204,6 +227,21 @@ function TopOperationsTable({
 	return (
 		<div className="top-operation">
 			<div className="top-operation__controls">
+				<div className="top-operation__apis-only">
+					<Tooltip
+						title={isOnlyApis ? 'Show all operations' : 'Show only API operations'}
+					>
+						<Button
+							size="small"
+							type={isOnlyApis ? 'primary' : 'default'}
+							onClick={handleOnlyApisToggle}
+							className="top-operation__apis-only-btn"
+							data-testid="only-apis-btn"
+						>
+							Only APIs
+						</Button>
+					</Tooltip>
+				</div>
 				<div className="top-operation__download">
 					<Download
 						data={downloadableData}
@@ -230,7 +268,7 @@ function TopOperationsTable({
 					isEntryPoint ? 'Key Entrypoint Operations' : 'Key Operations'
 				}
 				tableLayout="fixed"
-				dataSource={data}
+				dataSource={displayData}
 				rowKey="name"
 				pagination={paginationConfig}
 			/>
@@ -252,6 +290,8 @@ interface TopOperationsTableProps {
 	isLoading: boolean;
 	isEntryPoint: boolean;
 	onEntryPointToggle: (checked: boolean) => void;
+	isOnlyApis?: boolean;
+	onOnlyApisToggle?: (checked: boolean) => void;
 }
 
 export default TopOperationsTable;

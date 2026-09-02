@@ -306,4 +306,110 @@ describe('TopOperation API Integration', () => {
 
 		expect(toggleSwitch).not.toBeChecked();
 	});
+
+	it('displays Only APIs button and filters operations when clicked', async () => {
+		const customData = [
+			{
+				name: 'POST /enrich/get-vehicle-challans',
+				p50: 1000000,
+				p95: 2000000,
+				p99: 3000000,
+				numCalls: 3,
+				errorCount: 1,
+			},
+			{
+				name: 'request handler - /enrich/get-vehicle-challans',
+				p50: 1000000,
+				p95: 2000000,
+				p99: 3000000,
+				numCalls: 3,
+				errorCount: 0,
+			},
+			{
+				name: 'GET',
+				p50: 1000000,
+				p95: 2000000,
+				p99: 3000000,
+				numCalls: 3,
+				errorCount: 1,
+			},
+			{
+				name: 'tcp.connect',
+				p50: 1000000,
+				p95: 2000000,
+				p99: 3000000,
+				numCalls: 22,
+				errorCount: 6,
+			},
+		];
+
+		server.use(
+			rest.post(
+				'http://localhost/api/v2/service/top_operations',
+				async (req, res, ctx) => {
+					const body = await req.json();
+					apiCalls.push({ endpoint: TOP_OPERATIONS_ENDPOINT, body });
+					return res(
+						ctx.status(200),
+						ctx.json({ status: 'success', data: customData }),
+					);
+				},
+			),
+		);
+
+		renderComponent();
+		await waitForInitialRender();
+
+		await waitFor(() => {
+			expect(
+				screen.getByText('POST /enrich/get-vehicle-challans'),
+			).toBeInTheDocument();
+			expect(
+				screen.getByText('request handler - /enrich/get-vehicle-challans'),
+			).toBeInTheDocument();
+			expect(screen.getByText('GET')).toBeInTheDocument();
+			expect(screen.getByText('tcp.connect')).toBeInTheDocument();
+		});
+
+		const onlyApisBtn = screen.getByTestId('only-apis-btn');
+		expect(onlyApisBtn).toBeInTheDocument();
+
+		act(() => {
+			fireEvent.click(onlyApisBtn);
+		});
+
+		await waitFor(() => {
+			expect(
+				screen.getByText('POST /enrich/get-vehicle-challans'),
+			).toBeInTheDocument();
+			expect(screen.queryByText('GET')).not.toBeInTheDocument();
+			expect(
+				screen.queryByText('request handler - /enrich/get-vehicle-challans'),
+			).not.toBeInTheDocument();
+			expect(screen.queryByText('tcp.connect')).not.toBeInTheDocument();
+		});
+
+		await waitFor(() => {
+			expect(apiCalls[apiCalls.length - 1].body.onlyApis).toBe(true);
+		});
+
+		act(() => {
+			fireEvent.click(onlyApisBtn);
+		});
+
+		await waitFor(() => {
+			expect(
+				screen.getByText('POST /enrich/get-vehicle-challans'),
+			).toBeInTheDocument();
+			expect(
+				screen.getByText('request handler - /enrich/get-vehicle-challans'),
+			).toBeInTheDocument();
+			expect(screen.getByText('GET')).toBeInTheDocument();
+			expect(screen.getByText('tcp.connect')).toBeInTheDocument();
+		});
+
+		await waitFor(() => {
+			expect(apiCalls[apiCalls.length - 1].body.onlyApis).toBeUndefined();
+		});
+	});
 });

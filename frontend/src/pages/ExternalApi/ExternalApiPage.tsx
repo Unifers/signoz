@@ -48,6 +48,7 @@ import {
 import { APIDomainsRowData } from 'container/ApiMonitoring/types';
 import { formatDataForTable } from 'container/ApiMonitoring/utils';
 import { useListOverview } from 'hooks/thirdPartyApis/useListOverview';
+import useDebounce from 'hooks/useDebounce';
 import getLocalStorageKey from 'api/browser/localstorage/get';
 import setLocalStorageKey from 'api/browser/localstorage/set';
 
@@ -92,7 +93,8 @@ const stripQueryParams = (url: string): string => {
 	if (!url) {
 		return '';
 	}
-	return url.split('?')[0];
+	const qIndex = url.indexOf('?');
+	return qIndex === -1 ? url : url.slice(0, qIndex);
 };
 
 const getHostFromUrl = (urlStr: string): string => {
@@ -178,6 +180,7 @@ function ExternalApiPage(): JSX.Element {
 		'builder.queryData[0].filter.expression',
 		'',
 	);
+	const debouncedFilterExpression = useDebounce(filterExpression, 300);
 
 	// Fetch data via useListOverview
 	const queryResponse = useListOverview({
@@ -186,8 +189,8 @@ function ExternalApiPage(): JSX.Element {
 		show_ip: false,
 		group_by_url: true,
 		filter: {
-			expression: filterExpression
-				? `kind_string = 'Client' AND ${filterExpression}`
+			expression: debouncedFilterExpression
+				? `kind_string = 'Client' AND ${debouncedFilterExpression}`
 				: `kind_string = 'Client'`,
 		},
 		globalRule,
@@ -396,257 +399,266 @@ function ExternalApiPage(): JSX.Element {
 	}, [selectedDomain, aggregatedData]);
 
 	// Open Individual API Settings Modal
-	const openApiSettings = (endpoint: string): void => {
-		const current = apiRules[endpoint] || globalRule;
-		form.setFieldsValue(current);
-		setEditingApi(endpoint);
-	};
+	const openApiSettings = useCallback(
+		(endpoint: string): void => {
+			const current = apiRules[endpoint] || globalRule;
+			form.setFieldsValue(current);
+			setEditingApi(endpoint);
+		},
+		[apiRules, globalRule, form],
+	);
 
 	// Save Individual API Settings
-	const saveApiSettings = (values: RuleConfig): void => {
-		if (editingApi) {
-			const updated = {
-				...apiRules,
-				[editingApi]: values,
-			};
-			setApiRules(updated);
-			setLocalStorageKey(STORAGE_KEYS.API_RULES, JSON.stringify(updated));
-			setEditingApi(null);
-		}
-	};
+	const saveApiSettings = useCallback(
+		(values: RuleConfig): void => {
+			if (editingApi) {
+				const updated = {
+					...apiRules,
+					[editingApi]: values,
+				};
+				setApiRules(updated);
+				setLocalStorageKey(STORAGE_KEYS.API_RULES, JSON.stringify(updated));
+				setEditingApi(null);
+			}
+		},
+		[editingApi, apiRules],
+	);
 
 	// Open Global Settings Modal
-	const openGlobalSettings = (): void => {
+	const openGlobalSettings = useCallback((): void => {
 		globalForm.setFieldsValue(globalRule);
 		setIsGlobalModalOpen(true);
-	};
+	}, [globalRule, globalForm]);
 
 	// Save Global Settings
-	const saveGlobalSettings = (values: RuleConfig): void => {
+	const saveGlobalSettings = useCallback((values: RuleConfig): void => {
 		setGlobalRule(values);
 		setLocalStorageKey(STORAGE_KEYS.GLOBAL_RULES, JSON.stringify(values));
 		setIsGlobalModalOpen(false);
-	};
+	}, []);
 
-	const columns = [
-		{
-			title: 'Status',
-			dataIndex: 'status',
-			key: 'status',
-			width: '10%',
-			render: (status: 'success' | 'warning' | 'error'): JSX.Element => {
-				if (status === 'error') {
+	const columns = useMemo(
+		() => [
+			{
+				title: 'Status',
+				dataIndex: 'status',
+				key: 'status',
+				width: '10%',
+				render: (status: 'success' | 'warning' | 'error'): JSX.Element => {
+					if (status === 'error') {
+						return (
+							<Badge color="error" variant="outline">
+								Error
+							</Badge>
+						);
+					}
+					if (status === 'warning') {
+						return (
+							<Badge color="warning" variant="outline">
+								Warning
+							</Badge>
+						);
+					}
 					return (
-						<Badge color="error" variant="outline">
-							Error
+						<Badge color="success" variant="outline">
+							Success
 						</Badge>
 					);
-				}
-				if (status === 'warning') {
-					return (
-						<Badge color="warning" variant="outline">
-							Warning
-						</Badge>
-					);
-				}
-				return (
-					<Badge color="success" variant="outline">
-						Success
-					</Badge>
-				);
+				},
+				filters: [
+					{ text: 'Success', value: 'success' },
+					{ text: 'Warning', value: 'warning' },
+					{ text: 'Error', value: 'error' },
+				],
+				onFilter: (value: any, record: ExternalApiRowData): boolean =>
+					record.status === value,
 			},
-			filters: [
-				{ text: 'Success', value: 'success' },
-				{ text: 'Warning', value: 'warning' },
-				{ text: 'Error', value: 'error' },
-			],
-			onFilter: (value: any, record: ExternalApiRowData): boolean =>
-				record.status === value,
-		},
-		{
-			title: 'API Endpoint',
-			dataIndex: 'endpoint',
-			key: 'endpoint',
-			width: '30%',
-			align: 'left' as const,
-			className: 'column column-domain-name',
-			render: (endpoint: string): JSX.Element => (
-				<div
-					className="api-endpoint-cell"
-					style={{
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'flex-start',
-						gap: 8,
-					}}
-				>
-					<Tooltip title="Configure status thresholds">
-						<Settings2
-							size={14}
-							className="settings-icon-btn"
-							style={{ cursor: 'pointer', flexShrink: 0 }}
-							onClick={(e) => {
-								e.stopPropagation();
-								openApiSettings(endpoint);
-							}}
-						/>
-					</Tooltip>
-					<span className="domain-list-name-col-value">
-						{formatEndpointLabel(endpoint)}
-					</span>
-				</div>
-			),
-		},
-		{
-			title: 'Last Used',
-			dataIndex: 'lastUsed',
-			key: 'lastUsed',
-			width: '10%',
-			render: (lastUsed: string): string => {
-				if (!lastUsed) {
-					return '-';
-				}
-				const diffMs = Date.now() - new Date(lastUsed).getTime();
-				const mins = Math.floor(diffMs / 60000);
-				if (mins < 1) {
-					return 'Just now';
-				}
-				if (mins < 60) {
-					return `${mins}m ago`;
-				}
-				const hrs = Math.floor(mins / 60);
-				if (hrs < 24) {
-					return `${hrs}h ago`;
-				}
-				return `${Math.floor(hrs / 24)}d ago`;
-			},
-		},
-		{
-			title: (
-				<div>
-					Rate <span className="round-metric-tag">ops/s</span>
-				</div>
-			),
-			dataIndex: 'rate',
-			key: 'rate',
-			width: '10%',
-			align: 'right' as const,
-			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
-				a.rate - b.rate,
-		},
-		{
-			title: 'Total Requests',
-			dataIndex: 'totalCount',
-			key: 'totalCount',
-			width: '12%',
-			align: 'right' as const,
-			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
-				a.totalCount - b.totalCount,
-			render: (totalCount: number): string =>
-				totalCount > 0 ? totalCount.toLocaleString() : '-',
-		},
-		{
-			title: (
-				<div>
-					Error & Warning Rate <span className="round-metric-tag">%</span>
-				</div>
-			),
-			dataIndex: 'errorRate',
-			key: 'errorRate',
-			width: '20%',
-			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
-				a.errorRate - b.errorRate,
-			render: (errorRate: number, record: ExternalApiRowData): JSX.Element => {
-				const warningRate = record.warningRate || 0;
-				const successRate = 100 - errorRate - warningRate;
-
-				return (
+			{
+				title: 'API Endpoint',
+				dataIndex: 'endpoint',
+				key: 'endpoint',
+				width: '30%',
+				align: 'left' as const,
+				className: 'column column-domain-name',
+				render: (endpoint: string): JSX.Element => (
 					<div
-						className="custom-progress-container"
-						style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+						className="api-endpoint-cell"
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'flex-start',
+							gap: 8,
+						}}
 					>
-						<div
-							className="custom-progress-bar-wrapper"
-							style={{
-								display: 'flex',
-								width: '100%',
-								height: 8,
-								borderRadius: 4,
-								overflow: 'hidden',
-								backgroundColor: 'var(--l3-background)',
-							}}
-						>
-							{errorRate > 0 && (
-								<Tooltip title={`Error: ${errorRate.toFixed(2)}%`}>
-									<div
-										className="progress-segment error-segment"
-										style={{
-											width: `${errorRate}%`,
-											backgroundColor: Color.BG_SAKURA_500,
-										}}
-									/>
-								</Tooltip>
-							)}
-							{warningRate > 0 && (
-								<Tooltip title={`Warning: ${warningRate.toFixed(2)}%`}>
-									<div
-										className="progress-segment warning-segment"
-										style={{
-											width: `${warningRate}%`,
-											backgroundColor: Color.BG_AMBER_500,
-										}}
-									/>
-								</Tooltip>
-							)}
-							{successRate > 0 && (
-								<Tooltip title={`Success: ${successRate.toFixed(2)}%`}>
-									<div
-										className="progress-segment success-segment"
-										style={{
-											width: `${successRate}%`,
-											backgroundColor: Color.BG_FOREST_500,
-										}}
-									/>
-								</Tooltip>
-							)}
-						</div>
-						<div
-							className="custom-progress-text"
-							style={{
-								fontSize: 11,
-								color: 'var(--l2-foreground)',
-								display: 'flex',
-								justifyContent: 'space-between',
-							}}
-						>
-							<span>Err: {errorRate.toFixed(1)}%</span>
-							<span>Warn: {warningRate.toFixed(1)}%</span>
-						</div>
+						<Tooltip title="Configure status thresholds">
+							<Settings2
+								size={14}
+								className="settings-icon-btn"
+								style={{ cursor: 'pointer', flexShrink: 0 }}
+								onClick={(e) => {
+									e.stopPropagation();
+									openApiSettings(endpoint);
+								}}
+							/>
+						</Tooltip>
+						<span className="domain-list-name-col-value">
+							{formatEndpointLabel(endpoint)}
+						</span>
 					</div>
-				);
+				),
 			},
-		},
-		{
-			title: 'Avg. Latency (ms)',
-			dataIndex: 'latency',
-			key: 'latency',
-			width: '12%',
-			align: 'right' as const,
-			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
-				a.latency - b.latency,
-			render: (latency: number): string => `${latency} ms`,
-		},
-		{
-			title: 'p99 Latency (ms)',
-			dataIndex: 'p99Latency',
-			key: 'p99Latency',
-			width: '12%',
-			align: 'right' as const,
-			sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
-				a.p99Latency - b.p99Latency,
-			render: (p99Latency: number): string => `${p99Latency} ms`,
-		},
-	];
+			{
+				title: 'Last Used',
+				dataIndex: 'lastUsed',
+				key: 'lastUsed',
+				width: '10%',
+				render: (lastUsed: string): string => {
+					if (!lastUsed) {
+						return '-';
+					}
+					const diffMs = Date.now() - new Date(lastUsed).getTime();
+					const mins = Math.floor(diffMs / 60000);
+					if (mins < 1) {
+						return 'Just now';
+					}
+					if (mins < 60) {
+						return `${mins}m ago`;
+					}
+					const hrs = Math.floor(mins / 60);
+					if (hrs < 24) {
+						return `${hrs}h ago`;
+					}
+					return `${Math.floor(hrs / 24)}d ago`;
+				},
+			},
+			{
+				title: (
+					<div>
+						Rate <span className="round-metric-tag">ops/s</span>
+					</div>
+				),
+				dataIndex: 'rate',
+				key: 'rate',
+				width: '10%',
+				align: 'right' as const,
+				sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+					a.rate - b.rate,
+			},
+			{
+				title: 'Total Requests',
+				dataIndex: 'totalCount',
+				key: 'totalCount',
+				width: '12%',
+				align: 'right' as const,
+				sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+					a.totalCount - b.totalCount,
+				render: (totalCount: number): string =>
+					totalCount > 0 ? totalCount.toLocaleString() : '-',
+			},
+			{
+				title: (
+					<div>
+						Error & Warning Rate <span className="round-metric-tag">%</span>
+					</div>
+				),
+				dataIndex: 'errorRate',
+				key: 'errorRate',
+				width: '20%',
+				sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+					a.errorRate - b.errorRate,
+				render: (errorRate: number, record: ExternalApiRowData): JSX.Element => {
+					const warningRate = record.warningRate || 0;
+					const successRate = 100 - errorRate - warningRate;
+
+					return (
+						<div
+							className="custom-progress-container"
+							style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+						>
+							<div
+								className="custom-progress-bar-wrapper"
+								style={{
+									display: 'flex',
+									width: '100%',
+									height: 8,
+									borderRadius: 4,
+									overflow: 'hidden',
+									backgroundColor: 'var(--l3-background)',
+								}}
+							>
+								{errorRate > 0 && (
+									<Tooltip title={`Error: ${errorRate.toFixed(2)}%`}>
+										<div
+											className="progress-segment error-segment"
+											style={{
+												width: `${errorRate}%`,
+												backgroundColor: Color.BG_SAKURA_500,
+											}}
+										/>
+									</Tooltip>
+								)}
+								{warningRate > 0 && (
+									<Tooltip title={`Warning: ${warningRate.toFixed(2)}%`}>
+										<div
+											className="progress-segment warning-segment"
+											style={{
+												width: `${warningRate}%`,
+												backgroundColor: Color.BG_AMBER_500,
+											}}
+										/>
+									</Tooltip>
+								)}
+								{successRate > 0 && (
+									<Tooltip title={`Success: ${successRate.toFixed(2)}%`}>
+										<div
+											className="progress-segment success-segment"
+											style={{
+												width: `${successRate}%`,
+												backgroundColor: Color.BG_FOREST_500,
+											}}
+										/>
+									</Tooltip>
+								)}
+							</div>
+							<div
+								className="custom-progress-text"
+								style={{
+									fontSize: 11,
+									color: 'var(--l2-foreground)',
+									display: 'flex',
+									justifyContent: 'space-between',
+								}}
+							>
+								<span>Err: {errorRate.toFixed(1)}%</span>
+								<span>Warn: {warningRate.toFixed(1)}%</span>
+							</div>
+						</div>
+					);
+				},
+			},
+			{
+				title: 'Avg. Latency (ms)',
+				dataIndex: 'latency',
+				key: 'latency',
+				width: '12%',
+				align: 'right' as const,
+				sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+					a.latency - b.latency,
+				render: (latency: number): string => `${latency} ms`,
+			},
+			{
+				title: 'p99 Latency (ms)',
+				dataIndex: 'p99Latency',
+				key: 'p99Latency',
+				width: '12%',
+				align: 'right' as const,
+				sorter: (a: ExternalApiRowData, b: ExternalApiRowData): number =>
+					a.p99Latency - b.p99Latency,
+				render: (p99Latency: number): string => `${p99Latency} ms`,
+			},
+		],
+		[openApiSettings],
+	);
 
 	return (
 		<div
@@ -758,19 +770,20 @@ function ExternalApiPage(): JSX.Element {
 						aggregatedData.length > 0) && (
 						<Table
 							className="api-monitoring-domain-list-table"
-							dataSource={
-								queryResponse.isFetching || queryResponse.isLoading
-									? []
-									: aggregatedData
-							}
+							dataSource={aggregatedData}
 							columns={columns}
 							loading={{
-								spinning: queryResponse.isFetching || queryResponse.isLoading,
+								spinning: queryResponse.isLoading && aggregatedData.length === 0,
 								indicator: (
 									<Spin indicator={<Loader size={16} className="animate-spin" />} />
 								),
 							}}
-							pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+							pagination={{
+								defaultPageSize: 20,
+								showSizeChanger: true,
+								pageSizeOptions: ['10', '20', '50', '100'],
+								showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} APIs`,
+							}}
 							onRow={(record, index): { onClick: () => void; className: string } => ({
 								onClick: (): void => {
 									if (index !== undefined) {

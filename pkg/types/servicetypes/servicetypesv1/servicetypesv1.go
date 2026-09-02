@@ -37,11 +37,12 @@ type DataWarning struct {
 
 // OperationsRequest is the common request for both top_operations and entry_point_operations.
 type OperationsRequest struct {
-	Start   string          `json:"start"`
-	End     string          `json:"end"`
-	Service string          `json:"service"`
-	Tags    []TagFilterItem `json:"tags"`
-	Limit   int             `json:"limit,omitempty"`
+	Start    string          `json:"start"`
+	End      string          `json:"end"`
+	Service  string          `json:"service"`
+	Tags     []TagFilterItem `json:"tags"`
+	Limit    int             `json:"limit,omitempty"`
+	OnlyApis bool            `json:"onlyApis,omitempty"`
 }
 
 // OperationItem is the common response item shape for both APIs.

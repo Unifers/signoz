@@ -264,3 +264,33 @@ func TestValidateTagFilterItems(t *testing.T) {
 		})
 	}
 }
+
+func TestIsApiOperation(t *testing.T) {
+	tests := []struct {
+		name string
+		op   string
+		want bool
+	}{
+		{name: "POST with route", op: "POST /enrich/get-vehicle-challans", want: true},
+		{name: "GET with path", op: "GET /api/v1/users", want: true},
+		{name: "PUT with id", op: "PUT /items/123", want: true},
+		{name: "DELETE with id", op: "DELETE /items/123", want: true},
+		{name: "root slash", op: "/enrich/get-vehicle-challans", want: true},
+		{name: "bare GET", op: "GET", want: false},
+		{name: "bare POST", op: "POST", want: false},
+		{name: "bare get", op: "get", want: false},
+		{name: "request handler", op: "request handler - /enrich/get-vehicle-challans", want: false},
+		{name: "tcp connect", op: "tcp.connect", want: false},
+		{name: "middleware", op: "middleware - query", want: false},
+		{name: "sql select", op: "SELECT * FROM users", want: false},
+		{name: "sql delete", op: "DELETE FROM users WHERE id = 1", want: false},
+		{name: "empty string", op: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsApiOperation(tt.op)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

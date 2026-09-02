@@ -22,6 +22,7 @@ function TopOperation(): JSX.Element {
 	const servicename = decodeURIComponent(encodedServiceName || '');
 
 	const [isEntryPoint, setIsEntryPoint] = useState<boolean>(false);
+	const [isOnlyApis, setIsOnlyApis] = useState<boolean>(false);
 
 	const { queries } = useResourceAttribute();
 	const selectedTags = useMemo(
@@ -30,7 +31,14 @@ function TopOperation(): JSX.Element {
 	);
 
 	const { data, isLoading } = useQuery<PayloadProps>({
-		queryKey: [minTime, maxTime, servicename, selectedTags, isEntryPoint],
+		queryKey: [
+			minTime,
+			maxTime,
+			servicename,
+			selectedTags,
+			isEntryPoint,
+			isOnlyApis,
+		],
 		queryFn: (): Promise<PayloadProps> =>
 			getTopOperations({
 				service: servicename || '',
@@ -38,6 +46,7 @@ function TopOperation(): JSX.Element {
 				end: maxTime,
 				selectedTags,
 				isEntryPoint,
+				onlyApis: isOnlyApis,
 			}),
 	});
 
@@ -49,6 +58,8 @@ function TopOperation(): JSX.Element {
 			isLoading={isLoading}
 			isEntryPoint={isEntryPoint}
 			onEntryPointToggle={setIsEntryPoint}
+			isOnlyApis={isOnlyApis}
+			onOnlyApisToggle={setIsOnlyApis}
 		/>
 	);
 }

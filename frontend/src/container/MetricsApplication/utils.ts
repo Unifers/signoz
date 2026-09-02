@@ -72,3 +72,79 @@ export const convertedTracesToDownloadData = (
 
 		return newObj;
 	});
+
+export const isApiOperation = (operationName: string): boolean => {
+	if (!operationName || typeof operationName !== 'string') {
+		return false;
+	}
+	const trimmed = operationName.trim();
+	if (!trimmed) {
+		return false;
+	}
+
+	const lower = trimmed.toLowerCase();
+
+	// Exclude known non-API / internal instrumentation prefixes
+	const internalPrefixes = [
+		'request handler',
+		'middleware',
+		'router -',
+		'router.',
+		'tcp.',
+		'dns.',
+		'fs.',
+		'net.',
+		'tls.',
+		'http.client',
+		'grpc.client',
+		'pg.',
+		'redis.',
+		'mongodb.',
+		'amqp.',
+		'kafka.',
+	];
+	if (internalPrefixes.some((prefix) => lower.startsWith(prefix))) {
+		return false;
+	}
+
+	// Exclude SQL queries like "DELETE FROM ...", "SELECT ...", "INSERT INTO ..."
+	if (
+		/^(select|insert|update|delete\s+from|delete\s+low_priority|delete\s+quick|create|alter|drop|truncate)\b/i.test(
+			trimmed,
+		)
+	) {
+		return false;
+	}
+
+	// Starts with standard HTTP method followed by an endpoint path or URL (e.g. "POST /path", "GET /api/...", "DELETE /users/1")
+	// Bare methods like "GET", "POST", "get" without an endpoint path are excluded
+	const httpMethodRegex =
+		/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\s+(\/|https?:\/\/).*/i;
+	if (httpMethodRegex.test(trimmed)) {
+		return true;
+	}
+
+	// Starts with "HTTP <METHOD>" followed by an endpoint path or URL (e.g. "HTTP GET /...")
+	const httpPrefixRegex =
+		/^HTTP(\/\d(\.\d)?)?\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(\/|https?:\/\/).*/i;
+	if (httpPrefixRegex.test(trimmed)) {
+		return true;
+	}
+
+	// Path-like operation starting with "/" (e.g. "/api/v1/users", "/enrich/get-vehicle-challans")
+	if (trimmed.startsWith('/')) {
+		return true;
+	}
+
+	// Full URL (e.g. "https://api.example.com/v1/...")
+	if (/^https?:\/\//i.test(trimmed)) {
+		return true;
+	}
+
+	// gRPC or RPC formatted like "package.Service/Method"
+	if (/^[a-zA-Z0-9_.]+\/[a-zA-Z0-9_]+$/.test(trimmed)) {
+		return true;
+	}
+
+	return false;
+};

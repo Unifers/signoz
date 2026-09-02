@@ -531,7 +531,7 @@ func TestMapTopOpsQueryRangeResp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := m.mapTopOpsQueryRangeResp(tt.resp)
+			got := m.mapTopOpsQueryRangeResp(tt.resp, false)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -766,7 +766,7 @@ func TestMapEntryPointOpsQueryRangeResp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := m.mapEntryPointOpsQueryRangeResp(tt.resp)
+			got := m.mapEntryPointOpsQueryRangeResp(tt.resp, false)
 			assert.Equal(t, tt.want, got)
 		})
 	}

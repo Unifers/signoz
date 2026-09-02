@@ -7,6 +7,7 @@ export interface Props {
 	end: number;
 	selectedTags: Tags[];
 	isEntryPoint?: boolean;
+	onlyApis?: boolean;
 }
 
 export type PayloadProps = TopOperationList[];

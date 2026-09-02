@@ -10,13 +10,18 @@ const getTopOperations = async (props: Props): Promise<PayloadProps> => {
 			? '/service/entry_point_operations'
 			: '/service/top_operations';
 
-		const response = await ApiV2Instance.post(endpoint, {
+		const payload: Record<string, any> = {
 			start: `${props.start}`,
 			end: `${props.end}`,
 			service: props.service,
 			tags: props.selectedTags,
 			limit: 5000,
-		});
+		};
+		if (props.onlyApis) {
+			payload.onlyApis = true;
+		}
+
+		const response = await ApiV2Instance.post(endpoint, payload);
 
 		return response.data.data;
 	} catch (error) {

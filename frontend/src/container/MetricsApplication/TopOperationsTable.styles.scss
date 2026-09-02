@@ -11,6 +11,10 @@
 		z-index: 1;
 		gap: 8px;
 	}
+	&__apis-only {
+		display: flex;
+		align-items: center;
+	}
 	&__entry-point {
 		display: flex;
 		align-items: center;

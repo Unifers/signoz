@@ -278,6 +278,10 @@ func BuildDomainInfo(req *thirdpartyapitypes.ThirdPartyApiRequest) (*qbtypes.Que
 }
 
 func buildEndpointsQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.QueryEnvelope {
+	expr := fmt.Sprintf("count_distinct(%s)", derivedKeyHTTPURL)
+	if req.GroupByUrl {
+		expr = "count()"
+	}
 	return qbtypes.QueryEnvelope{
 		Type: qbtypes.QueryTypeBuilder,
 		Spec: qbtypes.QueryBuilderQuery[qbtypes.TraceAggregation]{
@@ -285,7 +289,7 @@ func buildEndpointsQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtypes.Q
 			Signal:       telemetrytypes.SignalTraces,
 			StepInterval: qbtypes.Step{Duration: defaultStepInterval},
 			Aggregations: []qbtypes.TraceAggregation{
-				{Expression: fmt.Sprintf("count_distinct(%s)", derivedKeyHTTPURL)},
+				{Expression: expr},
 			},
 			Filter:  buildBaseFilter(req.Filter),
 			GroupBy: mergeGroupBy(getGroupByField(req), req.GroupBy),
@@ -540,7 +544,7 @@ func buildStatusFilter(codesStr string) string {
 	for _, p := range patterns {
 		p = strings.TrimSpace(strings.ToLower(p))
 		if p == "" {
-			parts = append(parts, "response_status_code = '' OR response_status_code = 'n/a'")
+			parts = append(parts, "response_status_code = '' OR response_status_code = 'n/a' OR response_status_code = '0' OR has_error = true")
 		} else if strings.HasSuffix(p, "xx") {
 			prefix := p[:len(p)-2]
 			parts = append(parts, fmt.Sprintf("response_status_code LIKE '%s%%'", prefix))
@@ -561,6 +565,8 @@ func buildRulesFilter(hostField string, globalCodes string, apiRules map[string]
 	var parts []string
 	var apiNames []string
 
+	timeoutCondition := "(response_status_code = '' OR response_status_code = 'n/a' OR response_status_code = '0' OR has_error = true)"
+
 	for apiName, rule := range apiRules {
 		codes := rule.WarningCodes
 		if isError {
@@ -570,12 +576,18 @@ func buildRulesFilter(hostField string, globalCodes string, apiRules map[string]
 			codes = globalCodes
 		}
 		expr := buildStatusFilter(codes)
+		if isError {
+			expr = fmt.Sprintf("(%s OR %s)", expr, timeoutCondition)
+		}
 		parts = append(parts, fmt.Sprintf("(%s = '%s' AND %s)", hostField, apiName, expr))
 		apiNames = append(apiNames, apiName)
 	}
 
 	// Add the global fallback
 	globalExpr := buildStatusFilter(globalCodes)
+	if isError {
+		globalExpr = fmt.Sprintf("(%s OR %s)", globalExpr, timeoutCondition)
+	}
 	if len(apiNames) > 0 {
 		var notInParts []string
 		for _, name := range apiNames {
