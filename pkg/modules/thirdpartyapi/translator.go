@@ -496,10 +496,16 @@ func buildLastSeenInfoQuery(req *thirdpartyapitypes.ThirdPartyApiRequest) qbtype
 }
 
 func buildBaseFilter(additionalFilter *qbtypes.Filter) *qbtypes.Filter {
+	if additionalFilter != nil && strings.Contains(additionalFilter.Expression, "kind_string") {
+		// User provided custom kind_string (e.g. kind_string = 'Server' or kind_string = 'Client')
+		if !strings.Contains(additionalFilter.Expression, derivedKeyHTTPURL) {
+			return &qbtypes.Filter{Expression: fmt.Sprintf("%s EXISTS AND (%s)", derivedKeyHTTPURL, additionalFilter.Expression)}
+		}
+		return &qbtypes.Filter{Expression: additionalFilter.Expression}
+	}
 	baseExpression := fmt.Sprintf("%s EXISTS AND kind_string = 'Client'", derivedKeyHTTPURL)
 
 	if additionalFilter != nil && additionalFilter.Expression != "" {
-		// even if it contains kind_string we add with an AND so it doesn't matter if the user is overriding it.
 		baseExpression = fmt.Sprintf("(%s) AND (%s)", baseExpression, additionalFilter.Expression)
 	}
 

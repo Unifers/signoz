@@ -64,5 +64,6 @@
 	"PUBLIC_DASHBOARD": "SigNoz | Dashboard",
 	"LLM_OBSERVABILITY_OVERVIEW": "SigNoz | LLM Observability Overview",
 	"LLM_OBSERVABILITY_CONFIGURATION": "SigNoz | LLM Observability Configuration",
-	"EXTERNAL_API_BOARD": "SigNoz | External API Board"
+	"EXTERNAL_API_BOARD": "SigNoz | External API Board",
+	"RECEIVED_API_BOARD": "SigNoz | Received API Board"
 }

@@ -293,7 +293,8 @@ function SideNav({ isPinned }: { isPinned: boolean }): JSX.Element {
 			}
 			if (
 				item.key === ROUTES.API_MONITORING ||
-				item.key === ROUTES.EXTERNAL_API_BOARD
+				item.key === ROUTES.EXTERNAL_API_BOARD ||
+				item.key === ROUTES.RECEIVED_API_BOARD
 			) {
 				return hasExternalApiAccess;
 			}

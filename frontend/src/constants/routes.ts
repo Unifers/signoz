@@ -78,6 +78,7 @@ const ROUTES = {
 	API_MONITORING_BASE: '/api-monitoring',
 	API_MONITORING: '/api-monitoring/explorer',
 	EXTERNAL_API_BOARD: '/external-api-board',
+	RECEIVED_API_BOARD: '/received-api-board',
 	METRICS_EXPLORER_BASE: '/metrics-explorer',
 	WORKSPACE_ACCESS_RESTRICTED: '/workspace-access-restricted',
 	METER: '/meter',

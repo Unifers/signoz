@@ -308,6 +308,10 @@ export const ExternalApi = Loadable(
 	() => import(/* webpackChunkName: "ExternalApi" */ 'pages/ExternalApi'),
 );
 
+export const ReceivedApi = Loadable(
+	() => import(/* webpackChunkName: "ReceivedApi" */ 'pages/ReceivedApi'),
+);
+
 export const PublicDashboardPage = Loadable(
 	() =>
 		import(

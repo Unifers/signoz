@@ -72,6 +72,7 @@
 	"METRICS_EXPLORER_VIEWS": "SigNoz | Metrics Explorer",
 	"API_MONITORING": "SigNoz | External APIs",
 	"EXTERNAL_API_BOARD": "SigNoz | External API Board",
+	"RECEIVED_API_BOARD": "SigNoz | Received API Board",
 	"METER_EXPLORER": "SigNoz | Meter Explorer",
 	"METER_EXPLORER_VIEWS": "SigNoz | Meter Explorer Views",
 	"METER": "SigNoz | Meter",
