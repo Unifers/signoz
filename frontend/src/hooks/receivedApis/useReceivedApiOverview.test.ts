@@ -51,7 +51,6 @@ describe('useReceivedApiOverview', () => {
 			expect(spec.groupBy).toStrictEqual([
 				{ name: 'name', fieldDataType: 'string', fieldContext: 'span' },
 				{ name: 'service.name', fieldDataType: 'string', fieldContext: 'resource' },
-				{ name: 'http_url', fieldDataType: 'string', fieldContext: 'span' },
 			]);
 		});
 

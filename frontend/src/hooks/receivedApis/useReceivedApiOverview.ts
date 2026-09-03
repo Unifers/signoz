@@ -129,11 +129,6 @@ export const buildReceivedApiQueryPayload = (
 								fieldDataType: 'string',
 								fieldContext: 'resource',
 							},
-							{
-								name: 'http_url',
-								fieldDataType: 'string',
-								fieldContext: 'span',
-							},
 						],
 						order: [
 							{

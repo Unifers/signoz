@@ -262,52 +262,33 @@ function ReceivedApiPage(): JSX.Element {
 			// 1. Service name filter
 			if (record.serviceName && record.serviceName !== '-') {
 				filterItems.push({
-					id: uuid(),
+					id: uuid().slice(0, 8),
 					key: {
-						key: 'service.name',
+						key: 'serviceName',
 						dataType: DataTypes.String,
-						type: 'resource',
-						isIndexed: true,
+						type: 'tag',
+						id: 'serviceName--string--tag--true',
 					},
 					op: 'in',
 					value: [record.serviceName],
 				});
-				expressions.push(`service.name IN ['${record.serviceName}']`);
+				expressions.push(`serviceName in ['${record.serviceName}']`);
 			}
 
-			// 2. API URL / endpoint filter
-			const apiUrl = record.httpUrl || record.endpoint;
-			const isFullUrl =
-				apiUrl.startsWith('http://') ||
-				apiUrl.startsWith('https://') ||
-				/^[\w.-]+(:\d+)?\//.test(apiUrl);
-
-			if (isFullUrl) {
+			// 2. Operation name filter
+			if (record.endpoint && record.endpoint !== '-') {
 				filterItems.push({
-					id: uuid(),
-					key: {
-						key: 'http_url',
-						dataType: DataTypes.String,
-						type: 'tag',
-						isIndexed: true,
-					},
-					op: 'in',
-					value: [apiUrl],
-				});
-				expressions.push(`http_url IN ['${apiUrl}']`);
-			} else {
-				filterItems.push({
-					id: uuid(),
+					id: uuid().slice(0, 8),
 					key: {
 						key: 'name',
 						dataType: DataTypes.String,
 						type: 'tag',
-						isIndexed: true,
+						id: 'name--string--tag--true',
 					},
 					op: 'in',
 					value: [record.endpoint],
 				});
-				expressions.push(`name IN ['${record.endpoint}']`);
+				expressions.push(`name in ['${record.endpoint}']`);
 			}
 
 			const filterExpression = expressions.join(' AND ');
@@ -348,7 +329,6 @@ function ReceivedApiPage(): JSX.Element {
 			const legacySelected = {
 				serviceName: record.serviceName !== '-' ? [record.serviceName] : [],
 				operation: [record.endpoint],
-				...(isFullUrl ? { http_url: [apiUrl] } : {}),
 			};
 			urlParams.set(
 				'selected',
@@ -356,14 +336,13 @@ function ReceivedApiPage(): JSX.Element {
 			);
 			urlParams.set(
 				'filterToFetchData',
-				'["duration","status","serviceName","operation","http_url"]',
+				'["duration","status","serviceName","operation"]',
 			);
 
 			const tracesUrl = `${ROUTES.TRACES_EXPLORER}?${urlParams.toString()}`;
 
 			logEvent('Received API Board: View traces clicked', {
 				endpoint: record.endpoint,
-				apiUrl,
 				service: record.serviceName,
 			});
 
