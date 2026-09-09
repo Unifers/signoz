@@ -3,6 +3,7 @@ package httplicensing
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -78,6 +79,10 @@ func (provider *provider) Stop(ctx context.Context) error {
 }
 
 func (provider *provider) Validate(ctx context.Context) error {
+	if os.Getenv("SIGNOZ_DISABLE_LICENSE_CHECK") == "true" {
+		return nil
+	}
+
 	organizations, err := provider.orgGetter.ListByOwnedKeyRange(ctx)
 	if err != nil {
 		return err
@@ -94,6 +99,10 @@ func (provider *provider) Validate(ctx context.Context) error {
 }
 
 func (provider *provider) Activate(ctx context.Context, organizationID valuer.UUID, key string) error {
+	if os.Getenv("SIGNOZ_DISABLE_LICENSE_CHECK") == "true" {
+		return nil
+	}
+
 	data, err := provider.zeus.GetLicense(ctx, key)
 	if err != nil {
 		return errors.Wrapf(err, errors.TypeInternal, errors.CodeInternal, "unable to fetch license data with upstream server")
