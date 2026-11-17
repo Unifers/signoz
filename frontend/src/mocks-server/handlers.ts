@@ -34,6 +34,14 @@ export const handlers = [
 		),
 	),
 
+	rest.get('http://localhost/api/v1/services/list', (req, res, ctx) =>
+		res(ctx.status(200), ctx.json(['TestService', 'TestCustomerService'])),
+	),
+
+	rest.get('/api/v1/services/list', (req, res, ctx) =>
+		res(ctx.status(200), ctx.json(['TestService', 'TestCustomerService'])),
+	),
+
 	rest.post(
 		'http://localhost/api/v1/service/top_level_operations',
 		(req, res, ctx) =>

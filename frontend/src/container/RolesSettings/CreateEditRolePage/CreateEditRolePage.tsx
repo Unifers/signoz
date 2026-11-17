@@ -1,6 +1,12 @@
 import { useCallback, useState } from 'react';
 import { matchPath, useHistory, useLocation } from 'react-router-dom';
-import { ArrowLeft, SolidAlertTriangle, Plus, Trash2 } from '@signozhq/icons';
+import {
+	ArrowLeft,
+	SolidAlertTriangle,
+	Plus,
+	Trash2,
+	RefreshCw,
+} from '@signozhq/icons';
 import { Button } from '@signozhq/ui/button';
 import { ConfirmDialog } from '@signozhq/ui/dialog';
 import { Input } from '@signozhq/ui/input';
@@ -113,8 +119,17 @@ function CreateEditRolePageContent(): JSX.Element {
 		roleName,
 	]);
 
-	const { data: fetchedServices } = useServicesList();
-	const availableServices = ['All Services', ...(fetchedServices || [])];
+	const {
+		data: fetchedServices,
+		refetch: refetchServices,
+		isFetching: isFetchingServices,
+	} = useServicesList();
+	const allProjectsInRole = projectPermissions
+		.map((p) => p.project)
+		.filter(Boolean);
+	const availableServices = Array.from(
+		new Set(['All Services', ...allProjectsInRole, ...(fetchedServices || [])]),
+	);
 
 	const addServicePermission = useCallback((): void => {
 		setProjectPermissions((prev) => [
@@ -333,15 +348,34 @@ function CreateEditRolePageContent(): JSX.Element {
 								this role.
 							</Typography>
 						</div>
-						<Button
-							variant="outlined"
-							color="secondary"
-							onClick={addServicePermission}
-							data-testid="add-project-permission-button"
-						>
-							<Plus size={14} style={{ marginRight: '6px' }} />
-							Add Service Scope
-						</Button>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+							<Button
+								variant="outlined"
+								color="secondary"
+								onClick={(): void => {
+									void refetchServices();
+								}}
+								disabled={isFetchingServices}
+								data-testid="refresh-services-button"
+								title="Refetch services discovered from recent logs and traces"
+							>
+								<RefreshCw
+									size={14}
+									style={{ marginRight: '6px' }}
+									className={isFetchingServices ? 'animate-spin' : ''}
+								/>
+								{isFetchingServices ? 'Refreshing...' : 'Refresh Services'}
+							</Button>
+							<Button
+								variant="outlined"
+								color="secondary"
+								onClick={addServicePermission}
+								data-testid="add-project-permission-button"
+							>
+								<Plus size={14} style={{ marginRight: '6px' }} />
+								Add Service Scope
+							</Button>
+						</div>
 					</div>
 
 					{projectPermissions.length === 0 ? (
@@ -371,9 +405,15 @@ function CreateEditRolePageContent(): JSX.Element {
 										<div className={styles.projectCell}>
 											<span className={styles.projectCellLabel}>Service Name</span>
 											<Select
+												showSearch
 												value={item.project}
 												onChange={(val): void =>
 													updateServicePermission(index, { project: val })
+												}
+												filterOption={(input, option): boolean =>
+													String(option?.children || '')
+														.toLowerCase()
+														.includes(input.toLowerCase())
 												}
 												style={{ width: '100%', minWidth: '100px' }}
 											>

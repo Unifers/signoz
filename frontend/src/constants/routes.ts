@@ -34,6 +34,7 @@ const ROUTES = {
 	MY_SETTINGS: '/settings/my-settings',
 	ORG_SETTINGS: '/settings/org-settings',
 	INGESTION_SETTINGS: '/settings/ingestion-settings',
+	HOST_RESOURCES: '/settings/host-resources',
 	SOMETHING_WENT_WRONG: '/something-went-wrong',
 	UN_AUTHORIZED: '/un-authorized',
 	NOT_FOUND: '/not-found',

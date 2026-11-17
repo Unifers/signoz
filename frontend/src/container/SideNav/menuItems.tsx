@@ -442,6 +442,19 @@ export const settingsNavSections: SettingsNavSection[] = [
 		],
 	},
 	{
+		key: 'system-resources',
+		title: 'System & Infrastructure',
+		items: [
+			{
+				key: ROUTES.HOST_RESOURCES,
+				label: 'Host Resources',
+				icon: <HardDrive size={16} />,
+				isEnabled: false,
+				itemKey: 'host-resources',
+			},
+		],
+	},
+	{
 		key: 'shortcuts',
 		hasDivider: true,
 		items: [

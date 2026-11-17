@@ -52,11 +52,12 @@ describe('SettingsPage nav sections', () => {
 			'integrations',
 			'ingestion',
 			'mcp-server',
+			'host-resources',
 		])('renders "%s" element', (id) => {
 			expect(screen.getByTestId(id)).toBeInTheDocument();
 		});
 
-		it.each(['Identity & Access', 'Authentication'])(
+		it.each(['Identity & Access', 'Authentication', 'System & Infrastructure'])(
 			'renders "%s" section title',
 			(text) => {
 				expect(screen.getByText(text)).toBeInTheDocument();
@@ -80,9 +81,12 @@ describe('SettingsPage nav sections', () => {
 			},
 		);
 
-		it.each(['billing'])('does not render "%s" element', (id) => {
-			expect(screen.queryByTestId(id)).not.toBeInTheDocument();
-		});
+		it.each(['billing', 'host-resources'])(
+			'does not render "%s" element',
+			(id) => {
+				expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+			},
+		);
 
 		it('renders "mcp-server" element', () => {
 			expect(screen.getByTestId('mcp-server')).toBeInTheDocument();
@@ -105,6 +109,7 @@ describe('SettingsPage nav sections', () => {
 			'sso',
 			'ingestion',
 			'mcp-server',
+			'host-resources',
 		])('renders "%s" element', (id) => {
 			expect(screen.getByTestId(id)).toBeInTheDocument();
 		});

@@ -557,6 +557,7 @@ func (aH *APIHandler) RegisterRoutes(router *mux.Router, am *middleware.AuthZ) {
 	router.HandleFunc("/api/v1/nextPrevErrorIDs", am.ViewAccess(aH.getNextPrevErrorIDs)).Methods(http.MethodGet)
 
 	router.HandleFunc("/api/v1/disks", am.ViewAccess(aH.getDisks)).Methods(http.MethodGet)
+	router.HandleFunc("/api/v1/admin/host-metrics", am.AdminAccess(aH.getHostMetrics)).Methods(http.MethodGet)
 
 	// Quick Filters
 	router.HandleFunc("/api/v1/orgs/me/filters", am.ViewAccess(aH.Signoz.Handlers.QuickFilter.GetQuickFilters)).Methods(http.MethodGet)
@@ -1472,6 +1473,11 @@ func (aH *APIHandler) getServicesList(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		result = &filtered
+	}
+
+	if result == nil {
+		empty := []string{}
+		result = &empty
 	}
 
 	aH.WriteJSON(w, r, result)

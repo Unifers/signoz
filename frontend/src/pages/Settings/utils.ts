@@ -5,6 +5,7 @@ import { ROLES, USER_ROLES } from 'types/roles';
 import {
 	billingSettings,
 	generalSettings,
+	hostResourcesSettings,
 	ingestionSettings,
 	keyboardShortcuts,
 	mcpServerSettings,
@@ -68,9 +69,9 @@ export const getRoutes = (
 		...roleEdit(t),
 	);
 
-	// Admin-only: members management
+	// Admin-only: members management and host resources
 	if (isAdmin) {
-		settings.push(...membersSettings(t));
+		settings.push(...membersSettings(t), ...hostResourcesSettings(t));
 	}
 
 	if ((isCloudUser || isEnterpriseSelfHostedUser) && isAdmin) {

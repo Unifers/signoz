@@ -95,7 +95,8 @@ function SettingsPage(): JSX.Element {
 							item.key === ROUTES.ORG_SETTINGS ||
 							item.key === ROUTES.MEMBERS_SETTINGS ||
 							item.key === ROUTES.SHORTCUTS ||
-							item.key === ROUTES.MCP_SERVER
+							item.key === ROUTES.MCP_SERVER ||
+							item.key === ROUTES.HOST_RESOURCES
 								? true
 								: item.isEnabled,
 					}));
@@ -108,7 +109,8 @@ function SettingsPage(): JSX.Element {
 							item.key === ROUTES.INGESTION_SETTINGS ||
 							item.key === ROUTES.INTEGRATIONS ||
 							item.key === ROUTES.SHORTCUTS ||
-							item.key === ROUTES.MCP_SERVER
+							item.key === ROUTES.MCP_SERVER ||
+							item.key === ROUTES.HOST_RESOURCES
 								? true
 								: item.isEnabled,
 					}));
@@ -145,7 +147,8 @@ function SettingsPage(): JSX.Element {
 							item.key === ROUTES.ORG_SETTINGS ||
 							item.key === ROUTES.MEMBERS_SETTINGS ||
 							item.key === ROUTES.INGESTION_SETTINGS ||
-							item.key === ROUTES.MCP_SERVER
+							item.key === ROUTES.MCP_SERVER ||
+							item.key === ROUTES.HOST_RESOURCES
 								? true
 								: item.isEnabled,
 					}));
@@ -157,7 +160,8 @@ function SettingsPage(): JSX.Element {
 						isEnabled:
 							item.key === ROUTES.INTEGRATIONS ||
 							item.key === ROUTES.INGESTION_SETTINGS ||
-							item.key === ROUTES.MCP_SERVER
+							item.key === ROUTES.MCP_SERVER ||
+							item.key === ROUTES.HOST_RESOURCES
 								? true
 								: item.isEnabled,
 					}));
@@ -189,7 +193,9 @@ function SettingsPage(): JSX.Element {
 					updatedItems = updatedItems.map((item) => ({
 						...item,
 						isEnabled:
-							item.key === ROUTES.ORG_SETTINGS || item.key === ROUTES.MEMBERS_SETTINGS
+							item.key === ROUTES.ORG_SETTINGS ||
+							item.key === ROUTES.MEMBERS_SETTINGS ||
+							item.key === ROUTES.HOST_RESOURCES
 								? true
 								: item.isEnabled,
 					}));
