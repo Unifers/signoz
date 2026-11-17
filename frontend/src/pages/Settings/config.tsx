@@ -3,6 +3,7 @@ import ROUTES from 'constants/routes';
 import BillingContainer from 'container/BillingContainer/BillingContainer';
 import GeneralSettings from 'container/GeneralSettings';
 import GeneralSettingsCloud from 'container/GeneralSettingsCloud';
+import HostResources from 'container/HostResources';
 import IngestionSettings from 'container/IngestionSettings/IngestionSettings';
 import MultiIngestionSettings from 'container/IngestionSettings/MultiIngestionSettings';
 import MCPServerSettings from 'container/MCPServerSettings/MCPServerSettings';
@@ -18,6 +19,7 @@ import {
 	Building,
 	Cpu,
 	CreditCard,
+	HardDrive,
 	Keyboard,
 	Shield,
 	Sparkles,
@@ -224,5 +226,21 @@ export const mcpServerSettings = (t: TFunction): RouteTabProps['routes'] => [
 		),
 		route: ROUTES.MCP_SERVER,
 		key: ROUTES.MCP_SERVER,
+	},
+];
+
+export const hostResourcesSettings = (
+	t: TFunction,
+): RouteTabProps['routes'] => [
+	{
+		Component: HostResources,
+		name: (
+			<div className="periscope-tab">
+				<HardDrive size={16} />{' '}
+				{t('routes:host_resources', 'Host Resources').toString()}
+			</div>
+		),
+		route: ROUTES.HOST_RESOURCES,
+		key: ROUTES.HOST_RESOURCES,
 	},
 ];

@@ -356,8 +356,11 @@ type SpanAggregatesDBResponseItem struct {
 }
 
 type DiskItem struct {
-	Name string `json:"name,omitempty" ch:"name"`
-	Type string `json:"type,omitempty" ch:"type"`
+	Name       string `json:"name,omitempty" ch:"name"`
+	Type       string `json:"type,omitempty" ch:"type"`
+	Path       string `json:"path,omitempty" ch:"path"`
+	FreeSpace  uint64 `json:"freeSpace,omitempty" ch:"free_space"`
+	TotalSpace uint64 `json:"totalSpace,omitempty" ch:"total_space"`
 }
 
 type DBResponseServiceName struct {

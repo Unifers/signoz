@@ -280,15 +280,49 @@ func (r *ClickHouseReader) GetQueryRangeResult(ctx context.Context, query *model
 
 func (r *ClickHouseReader) GetServicesList(ctx context.Context) (*[]string, error) {
 	ctx = ctxtypes.NewContextWithCommentVals(ctx, map[string]string{
-		instrumentationtypes.TelemetrySignal:  telemetrytypes.SignalTraces.StringValue(),
+		instrumentationtypes.TelemetrySignal:  telemetrytypes.SignalLogs.StringValue(),
 		instrumentationtypes.CodeNamespace:    "clickhouse-reader",
 		instrumentationtypes.CodeFunctionName: "GetServicesList",
 	})
 
 	services := []string{}
-	rows, err := r.db.Query(ctx, fmt.Sprintf(`SELECT DISTINCT resource_string_service$$name FROM %s.%s WHERE ts_bucket_start > (toUnixTimestamp(now() - INTERVAL 1 DAY) - 1800) AND toDate(timestamp) > now() - INTERVAL 1 DAY`, r.TraceDB, r.traceTableName))
+	// Fast query across last 2 days of logs and traces resource tables
+	query := fmt.Sprintf(`
+		SELECT DISTINCT serviceName FROM (
+			SELECT DISTINCT simpleJSONExtractString(labels, 'service.name') AS serviceName
+			FROM %s.%s
+			WHERE seen_at_ts_bucket_start >= (toUnixTimestamp(now() - INTERVAL 2 DAY) - 1800)
+			UNION DISTINCT
+			SELECT DISTINCT simpleJSONExtractString(labels, 'service.name') AS serviceName
+			FROM %s.%s
+			WHERE seen_at_ts_bucket_start >= (toUnixTimestamp(now() - INTERVAL 2 DAY) - 1800)
+		) WHERE serviceName != '' ORDER BY serviceName ASC`,
+		r.logsDB, r.logsResourceTableV2,
+		r.TraceDB, r.traceResourceTableV3,
+	)
+
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("error in processing sql query")
+		r.logger.WarnContext(ctx, "failed to query combined resource tables, trying logs resource table only", errorsV2.Attr(err))
+		fallbackLogsQuery := fmt.Sprintf(`
+			SELECT DISTINCT serviceName FROM (
+				SELECT DISTINCT simpleJSONExtractString(labels, 'service.name') AS serviceName
+				FROM %s.%s
+				WHERE seen_at_ts_bucket_start >= (toUnixTimestamp(now() - INTERVAL 2 DAY) - 1800)
+			) WHERE serviceName != ''
+			ORDER BY serviceName ASC`,
+			r.logsDB, r.logsResourceTableV2,
+		)
+		var fbErr error
+		rows, fbErr = r.db.Query(ctx, fallbackLogsQuery)
+		if fbErr != nil {
+			r.logger.WarnContext(ctx, "failed to query logs resource table, falling back to legacy traces query", errorsV2.Attr(fbErr))
+			legacyQuery := fmt.Sprintf(`SELECT DISTINCT resource_string_service$$name FROM %s.%s WHERE ts_bucket_start > (toUnixTimestamp(now() - INTERVAL 2 DAY) - 1800) AND toDate(timestamp) > now() - INTERVAL 2 DAY`, r.TraceDB, r.traceTableName)
+			rows, err = r.db.Query(ctx, legacyQuery)
+			if err != nil {
+				return nil, fmt.Errorf("error in processing sql query: %w", err)
+			}
+		}
 	}
 
 	defer rows.Close()
@@ -297,7 +331,9 @@ func (r *ClickHouseReader) GetServicesList(ctx context.Context) (*[]string, erro
 		if err := rows.Scan(&serviceName); err != nil {
 			return &services, err
 		}
-		services = append(services, serviceName)
+		if serviceName != "" {
+			services = append(services, serviceName)
+		}
 	}
 
 	return &services, nil
@@ -2025,7 +2061,7 @@ func (r *ClickHouseReader) GetDisks(ctx context.Context) (*[]model.DiskItem, *mo
 	})
 	diskItems := []model.DiskItem{}
 
-	query := "SELECT name,type FROM system.disks"
+	query := "SELECT name, type, path, free_space, total_space FROM system.disks"
 	if err := r.db.Select(ctx, &diskItems, query); err != nil {
 		r.logger.Error("Error in processing sql query", errorsV2.Attr(err))
 		return nil, &model.ApiError{Typ: model.ErrorExec, Err: fmt.Errorf("error while getting disks. Err=%v", err)}

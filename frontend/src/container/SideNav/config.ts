@@ -40,6 +40,7 @@ export const routeConfig: Record<string, QueryParams[]> = {
 	[ROUTES.MEMBERS_SETTINGS]: [QueryParams.resourceAttributes],
 	[ROUTES.PASSWORD_RESET]: [QueryParams.resourceAttributes],
 	[ROUTES.SETTINGS]: [QueryParams.resourceAttributes],
+	[ROUTES.HOST_RESOURCES]: [QueryParams.resourceAttributes],
 	[ROUTES.SIGN_UP]: [QueryParams.resourceAttributes],
 	[ROUTES.SOMETHING_WENT_WRONG]: [QueryParams.resourceAttributes],
 	[ROUTES.TRACES_EXPLORER]: [QueryParams.resourceAttributes],
